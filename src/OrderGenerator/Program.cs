@@ -11,9 +11,9 @@ var app = builder.Build();
 // Config referencia FIX44.xml por caminho relativo; ancora o cwd no dir do binário.
 Directory.SetCurrentDirectory(AppContext.BaseDirectory);
 var settings = new SessionSettings(Path.Combine(AppContext.BaseDirectory, "generator.cfg"));
-var fixApp = new GeneratorApp();
-var storeFactory = new MemoryStoreFactory();
 var loggerFactory = app.Services.GetRequiredService<ILoggerFactory>();
+var fixApp = new GeneratorApp(loggerFactory.CreateLogger<GeneratorApp>());
+var storeFactory = new MemoryStoreFactory();
 var initiator = new QuickFix.Transport.SocketInitiator(fixApp, storeFactory, settings, loggerFactory, new DefaultMessageFactory());
 initiator.Start();
 app.Lifetime.ApplicationStopping.Register(() => initiator.Stop());

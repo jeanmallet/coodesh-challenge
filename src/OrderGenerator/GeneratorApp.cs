@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Microsoft.Extensions.Logging;
 using QuickFix;
 using QuickFix.Fields;
 
@@ -14,14 +15,14 @@ public record OrderResult(
 /// registra um TaskCompletionSource por ClOrdID e o completa quando o
 /// ExecutionReport correspondente chega no FromApp (correlação pela tag 11).
 /// </summary>
-public class GeneratorApp : MessageCracker, IApplication
+public class GeneratorApp(ILogger<GeneratorApp> logger) : MessageCracker, IApplication
 {
     private readonly ConcurrentDictionary<string, TaskCompletionSource<OrderResult>> _pending = new();
     private volatile SessionID? _sessionId;
 
     public void OnCreate(SessionID sessionID) { }
-    public void OnLogon(SessionID sessionID) { _sessionId = sessionID; Console.WriteLine($"[Generator] Logon: {sessionID}"); }
-    public void OnLogout(SessionID sessionID) { _sessionId = null; Console.WriteLine($"[Generator] Logout: {sessionID}"); }
+    public void OnLogon(SessionID sessionID) { _sessionId = sessionID; logger.LogInformation("Logon: {SessionID}", sessionID); }
+    public void OnLogout(SessionID sessionID) { _sessionId = null; logger.LogInformation("Logout: {SessionID}", sessionID); }
     public void ToAdmin(Message message, SessionID sessionID) { }
     public void FromAdmin(Message message, SessionID sessionID) { }
     public void ToApp(Message message, SessionID sessionID) { }

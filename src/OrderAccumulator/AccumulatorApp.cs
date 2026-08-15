@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using QuickFix;
 using QuickFix.Fields;
 
@@ -7,13 +8,13 @@ namespace OrderAccumulator;
 /// Acceptor FIX 4.4. Recebe NewOrderSingle, revalida todas as regras (autoritativo),
 /// aplica a regra de exposição e responde com ExecutionReport (New ou Rejected).
 /// </summary>
-public class AccumulatorApp : MessageCracker, IApplication
+public class AccumulatorApp(ILogger<AccumulatorApp> logger) : MessageCracker, IApplication
 {
     private readonly ExposureBook _book = new();
 
     public void OnCreate(SessionID sessionID) { }
-    public void OnLogon(SessionID sessionID) => Console.WriteLine($"[Accumulator] Logon: {sessionID}");
-    public void OnLogout(SessionID sessionID) => Console.WriteLine($"[Accumulator] Logout: {sessionID}");
+    public void OnLogon(SessionID sessionID) => logger.LogInformation("Logon: {SessionID}", sessionID);
+    public void OnLogout(SessionID sessionID) => logger.LogInformation("Logout: {SessionID}", sessionID);
     public void ToAdmin(Message message, SessionID sessionID) { }
     public void FromAdmin(Message message, SessionID sessionID) { }
     public void ToApp(Message message, SessionID sessionID) { }
@@ -24,7 +25,8 @@ public class AccumulatorApp : MessageCracker, IApplication
         var clOrdId = order.ClOrdID.Value;
         var fields = ExtractFields(order);
 
-        Console.WriteLine($"[Accumulator] NewOrderSingle {clOrdId} {fields.Symbol} side={fields.Side} qty={fields.Quantity} px={fields.Price}");
+        logger.LogInformation("NewOrderSingle {ClOrdId} {Symbol} side={Side} qty={Quantity} px={Price}",
+            clOrdId, fields.Symbol, fields.Side, fields.Quantity, fields.Price);
 
         var error = OrderRules.Validate(fields);
         if (error is not null)
@@ -52,7 +54,7 @@ public class AccumulatorApp : MessageCracker, IApplication
         Quantity: order.IsSetOrderQty() ? order.OrderQty.Value : 0m,
         Price: order.IsSetPrice() ? order.Price.Value : 0m);
 
-    private static void Send(SessionID sessionID, string clOrdId, OrderFields fields, bool accepted, string text)
+    private void Send(SessionID sessionID, string clOrdId, OrderFields fields, bool accepted, string text)
     {
         // Campos exigidos pelo dicionário FIX44 precisam de valores válidos mesmo na
         // rejeição por formato: usa fallbacks (símbolo/lado) só para o report ser bem-formado.
@@ -82,6 +84,7 @@ public class AccumulatorApp : MessageCracker, IApplication
         report.Set(new Text(text));
 
         Session.SendToTarget(report, sessionID);
-        Console.WriteLine($"[Accumulator] ExecutionReport {clOrdId} -> {(accepted ? "New" : "Rejected")}: {text}");
+        logger.LogInformation("ExecutionReport {ClOrdId} -> {ExecType}: {Text}",
+            clOrdId, accepted ? "New" : "Rejected", text);
     }
 }

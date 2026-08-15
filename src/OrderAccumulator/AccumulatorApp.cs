@@ -34,8 +34,10 @@ public class AccumulatorApp : MessageCracker, IApplication
         }
 
         var result = _book.Evaluate(
-            fields.Symbol, fields.Side == OrderRules.SideBuy ? OrderSide.Buy : OrderSide.Sell,
-            fields.Quantity, fields.Price);
+            symbol: fields.Symbol, 
+            side: fields.Side == OrderRules.SideBuy ? OrderSide.Buy : OrderSide.Sell,
+            quantity: fields.Quantity, 
+            price: fields.Price);
 
         var text = result.Accepted
             ? $"Aceita. Exposicao resultante {result.ResultingExposure:N2} para {fields.Symbol}"

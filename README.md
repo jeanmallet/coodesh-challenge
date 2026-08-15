@@ -1,26 +1,88 @@
-# Project Empty Template
+# Order Exposure Control (FIX 4.4)
 
-Este é um repositório de exemplo para você começar a desenvolver a questão, leia com atenção os requisitos do enunciado da questão na plataforma e seguia as boas práticas sobre como utilizar este repositório.
+Duas aplicações em C# que se comunicam via protocolo FIX 4.4 (QuickFIX/n): um
+**OrderGenerator** com formulário web que envia ordens (`NewOrderSingle`) e um
+**OrderAccumulator** que controla a exposição financeira por símbolo contra um limite
+de R$ 100.000.000, respondendo com `ExecutionReport` (aceite ou rejeição).
 
+> This is a challenge by [Coodesh](https://coodesh.com/)
 
-## Readme do Repositório
+## Tecnologias
 
-- Deve conter o título do projeto
-- Uma descrição sobre o projeto em frase
-- Deve conter uma lista com linguagem, framework e/ou tecnologias usadas
-- Como instalar e usar o projeto (instruções)
-- Não esqueça o [.gitignore](https://www.toptal.com/developers/gitignore)
-- Se está usando github pessoal, referencie que é um challenge by coodesh:  
+- **.NET 10** / C#
+- **QuickFIXn** (`QuickFIXn.Core` + `QuickFIXn.FIX44`) — engine do protocolo FIX 4.4
+- **ASP.NET Core Minimal API** + HTML/JS estático (frontend do OrderGenerator)
+- **xUnit** — testes da lógica de negócio
 
->  This is a challenge by [Coodesh](https://coodesh.com/)
+## Arquitetura
 
-## Finalização e Instruções para a Apresentação
+```
+Browser ──HTTP/JSON──> OrderGenerator ──FIX 4.4 (TCP :5001)──> OrderAccumulator
+ (form)                (web + initiator)   NewOrderSingle          (acceptor)
+                                    <── ExecutionReport (New/Rejected) ──
+```
 
-1. Adicione o link do repositório com a sua solução na questão na plataforma
-2. Verifique se o Readme está bom e faça o commit final em seu repositório;
-3. Envie e aguarde as instruções para seguir. Caso o teste tenha apresentação de vídeo, dentro da tela de entrega será possível gravar após adicionar o link do repositório. Sucesso e boa sorte. =)
+- **OrderGenerator** (`src/OrderGenerator`): app ASP.NET Core única que serve o
+  formulário e hospeda o *initiator* FIX in-process. O `POST /api/orders` monta a
+  ordem, envia pela sessão FIX e aguarda o `ExecutionReport` correlacionado por
+  `ClOrdID` (ponte assíncrona→síncrona via `TaskCompletionSource`, timeout de 5s).
+  Valida o formato antes de enviar (fail-fast): entrada inválida responde `400` e
+  **nunca** vira mensagem FIX.
+- **OrderAccumulator** (`src/OrderAccumulator`): console *acceptor*. É a **autoridade**
+  de validação — revalida todas as regras de campo e a de exposição. Mantém a
+  exposição por símbolo em memória (`ConcurrentDictionary`), com a verificação do
+  limite e a atualização atômicas sob lock por símbolo.
 
+### Regras de negócio
 
-## Suporte
+- **Símbolos**: PETR4, VALE3, VIIA4.
+- **Lado**: Compra (aumenta exposição) ou Venda (diminui).
+- **Quantidade**: inteiro positivo, `< 100.000`.
+- **Preço**: decimal positivo, múltiplo de 0.01, `< 1.000`.
+- **Exposição** por símbolo: `Σ(preço × qtd de Compras) − Σ(preço × qtd de Vendas)`.
+- **Limite**: R$ 100.000.000 sobre o **valor absoluto** da exposição. Uma ordem cuja
+  exposição resultante **ultrapasse** (estritamente `>`) o limite é rejeitada e não
+  entra no cálculo. Exatamente no limite é aceita.
+- **Aceite** ⇒ `ExecutionReport` com `ExecType=New` e a ordem entra no cálculo.
+  **Rejeição** ⇒ `ExecType=Rejected`, com o motivo em `Text` (tag 58), sem entrar no
+  cálculo.
 
-Para tirar dúvidas sobre o processo envie uma mensagem diretamente a um especialista no chat da plataforma. 
+Decisões de modelagem não óbvias estão registradas em [`docs/adr/`](docs/adr) e o
+glossário do domínio em [`CONTEXT.md`](CONTEXT.md).
+
+## Como executar
+
+Pré-requisito: [.NET 10 SDK](https://dotnet.microsoft.com/download).
+
+Abra **dois terminais** na raiz do repositório.
+
+1. Suba o acumulador primeiro (acceptor FIX na porta 5001):
+
+   ```bash
+   dotnet run --project src/OrderAccumulator
+   ```
+
+2. Suba o gerador (web + initiator):
+
+   ```bash
+   dotnet run --project src/OrderGenerator
+   ```
+
+3. Abra **`http://localhost:5080`** no browser, preencha o formulário e envie. A
+   resposta do `ExecutionReport` aparece na própria página.
+
+> ⚠️ **Duas portas distintas:** `5080` é a **página web** (OrderGenerator, HTTP).
+> `5001` é o **socket FIX** do OrderAccumulator (TCP puro) — abrir `5001` no browser
+> trava em loading, pois não é um servidor web. Use sempre `5080` na UI.
+
+> O gerador reconecta sozinho se o acumulador ainda não estiver no ar. O estado é em
+> memória: reiniciar o acumulador zera a exposição.
+
+## Testes
+
+```bash
+dotnet test
+```
+
+Cobrem a matriz de exposição/limite (incluindo a fronteira exata, exposição vendida
+líquida e concorrência sob o lock por símbolo) e as quatro regras de validação.

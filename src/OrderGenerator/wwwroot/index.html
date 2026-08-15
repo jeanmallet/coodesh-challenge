@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OrderGenerator — Nova Ordem (FIX 4.4)</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font-family: system-ui, sans-serif; max-width: 560px; margin: 2rem auto; padding: 0 1rem; }
+    h1 { font-size: 1.3rem; }
+    form { display: grid; gap: 0.75rem; }
+    label { display: grid; gap: 0.25rem; font-weight: 600; }
+    input, select, button { padding: 0.5rem; font-size: 1rem; }
+    button { cursor: pointer; font-weight: 700; }
+    #result { margin-top: 1.25rem; padding: 1rem; border-radius: 8px; white-space: pre-wrap;
+              border: 1px solid #8888; display: none; }
+    #result.ok { border-color: #2e7d32; background: #2e7d3218; }
+    #result.reject { border-color: #b8860b; background: #b8860b18; }
+    #result.error { border-color: #c62828; background: #c6282818; }
+    .status { font-weight: 700; font-size: 1.1rem; }
+    dl { display: grid; grid-template-columns: auto 1fr; gap: 0.15rem 0.75rem; margin: 0.5rem 0 0; }
+    dt { font-weight: 600; } dd { margin: 0; }
+  </style>
+</head>
+<body>
+  <h1>Nova Ordem — OrderGenerator</h1>
+  <form id="order-form">
+    <label>Símbolo
+      <select name="symbol" required>
+        <option value="PETR4">PETR4</option>
+        <option value="VALE3">VALE3</option>
+        <option value="VIIA4">VIIA4</option>
+      </select>
+    </label>
+    <label>Lado
+      <select name="side" required>
+        <option value="Compra">Compra</option>
+        <option value="Venda">Venda</option>
+      </select>
+    </label>
+    <label>Quantidade (inteiro, &lt; 100.000)
+      <input name="quantity" type="number" min="1" max="99999" step="1" required />
+    </label>
+    <label>Preço (múltiplo de 0.01, &lt; 1.000)
+      <input name="price" type="number" min="0.01" max="999.99" step="0.01" required />
+    </label>
+    <button type="submit">Enviar ordem</button>
+  </form>
+
+  <div id="result"></div>
+
+  <script>
+    const form = document.getElementById('order-form');
+    const box = document.getElementById('result');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const fd = new FormData(form);
+      const payload = {
+        symbol: fd.get('symbol'),
+        side: fd.get('side'),
+        quantity: Number(fd.get('quantity')),
+        price: Number(fd.get('price')),
+      };
+
+      box.style.display = 'block';
+      box.className = '';
+      box.textContent = 'Enviando…';
+
+      let res, data;
+      try {
+        res = await fetch('/api/orders', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        data = await res.json();
+      } catch (err) {
+        box.className = 'error';
+        box.textContent = 'Falha de rede: ' + err;
+        return;
+      }
+
+      if (!res.ok) {
+        box.className = 'error';
+        box.innerHTML = '<span class="status">Erro</span>' +
+          '<div>' + (data.error ?? ('HTTP ' + res.status)) + '</div>';
+        return;
+      }
+
+      const accepted = data.accepted;
+      box.className = accepted ? 'ok' : 'reject';
+      box.innerHTML =
+        '<span class="status">' + (accepted ? '✔ ACEITA' : '✖ REJEITADA') +
+        ' — ExecType=' + data.execType + '</span>' +
+        '<dl>' +
+        row('Símbolo', data.symbol) +
+        row('Lado', data.side) +
+        row('Quantidade', data.quantity) +
+        row('Preço', data.price) +
+        row('OrdStatus', data.ordStatus) +
+        row('ClOrdID', data.clOrdId) +
+        row('Text', data.text) +
+        '</dl>';
+    });
+
+    function row(k, v) {
+      return '<dt>' + k + '</dt><dd>' + (v ?? '') + '</dd>';
+    }
+  </script>
+</body>
+</html>

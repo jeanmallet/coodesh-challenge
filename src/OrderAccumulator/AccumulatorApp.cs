@@ -22,39 +22,40 @@ public class AccumulatorApp : MessageCracker, IApplication
     public void OnMessage(QuickFix.FIX44.NewOrderSingle order, SessionID sessionID)
     {
         var clOrdId = order.ClOrdID.Value;
-        var symbol = order.IsSetSymbol() ? order.Symbol.Value : "";
-        var side = order.IsSetSide() ? order.Side.Value : '\0';
-        var quantity = order.IsSetOrderQty() ? order.OrderQty.Value : 0m;
-        var price = order.IsSetPrice() ? order.Price.Value : 0m;
+        var fields = ExtractFields(order);
 
-        Console.WriteLine($"[Accumulator] NewOrderSingle {clOrdId} {symbol} side={side} qty={quantity} px={price}");
+        Console.WriteLine($"[Accumulator] NewOrderSingle {clOrdId} {fields.Symbol} side={fields.Side} qty={fields.Quantity} px={fields.Price}");
 
-        var error = OrderRules.Validate(symbol, side, quantity, price);
+        var error = OrderRules.Validate(fields);
         if (error is not null)
         {
-            Send(sessionID, clOrdId, symbol, side, quantity, price,
-                accepted: false, text: error);
+            Send(sessionID, clOrdId, fields, accepted: false, text: error);
             return;
         }
 
         var result = _book.Evaluate(
-            symbol, side == OrderRules.SideBuy ? OrderSide.Buy : OrderSide.Sell, quantity, price);
+            fields.Symbol, fields.Side == OrderRules.SideBuy ? OrderSide.Buy : OrderSide.Sell,
+            fields.Quantity, fields.Price);
 
         var text = result.Accepted
-            ? $"Aceita. Exposicao resultante {result.ResultingExposure:N2} para {symbol}"
+            ? $"Aceita. Exposicao resultante {result.ResultingExposure:N2} para {fields.Symbol}"
             : result.RejectReason!;
 
-        Send(sessionID, clOrdId, symbol, side, quantity, price,
-            accepted: result.Accepted, text: text);
+        Send(sessionID, clOrdId, fields, accepted: result.Accepted, text: text);
     }
 
-    private static void Send(SessionID sessionID, string clOrdId, string symbol, char side,
-        decimal quantity, decimal price, bool accepted, string text)
+    private static OrderFields ExtractFields(QuickFix.FIX44.NewOrderSingle order) => new(
+        Symbol: order.IsSetSymbol() ? order.Symbol.Value : "",
+        Side: order.IsSetSide() ? order.Side.Value : '\0',
+        Quantity: order.IsSetOrderQty() ? order.OrderQty.Value : 0m,
+        Price: order.IsSetPrice() ? order.Price.Value : 0m);
+
+    private static void Send(SessionID sessionID, string clOrdId, OrderFields fields, bool accepted, string text)
     {
         // Campos exigidos pelo dicionário FIX44 precisam de valores válidos mesmo na
         // rejeição por formato: usa fallbacks (símbolo/lado) só para o report ser bem-formado.
-        var reportSymbol = string.IsNullOrEmpty(symbol) ? "UNKNOWN" : symbol;
-        var reportSide = side is OrderRules.SideBuy or OrderRules.SideSell ? side : OrderRules.SideBuy;
+        var reportSymbol = string.IsNullOrEmpty(fields.Symbol) ? "UNKNOWN" : fields.Symbol;
+        var reportSide = fields.Side is OrderRules.SideBuy or OrderRules.SideSell ? fields.Side : OrderRules.SideBuy;
 
         var report = new QuickFix.FIX44.ExecutionReport
         {
@@ -65,16 +66,16 @@ public class AccumulatorApp : MessageCracker, IApplication
             Symbol = new Symbol(reportSymbol),
             Side = new Side(reportSide),
             LeavesQty = new LeavesQty(0m),
-            CumQty = new CumQty(accepted ? quantity : 0m),
-            AvgPx = new AvgPx(accepted ? price : 0m),
+            CumQty = new CumQty(accepted ? fields.Quantity : 0m),
+            AvgPx = new AvgPx(accepted ? fields.Price : 0m),
         };
         report.Set(new ClOrdID(clOrdId));
-        report.Set(new OrderQty(quantity));
+        report.Set(new OrderQty(fields.Quantity));
         if (accepted)
         {
-            report.Set(new LastQty(quantity));
-            report.Set(new LastPx(price));
-            report.Set(new Price(price));
+            report.Set(new LastQty(fields.Quantity));
+            report.Set(new LastPx(fields.Price));
+            report.Set(new Price(fields.Price));
         }
         report.Set(new Text(text));
 

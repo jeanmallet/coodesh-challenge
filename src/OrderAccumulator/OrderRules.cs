@@ -3,8 +3,13 @@ namespace OrderAccumulator;
 public enum OrderSide { Buy, Sell }
 
 /// <summary>
+/// Campos de uma NewOrderSingle extraídos da mensagem FIX, antes da validação.
+/// Side permanece como o char de wire (1/2) — pode ainda ser inválido neste ponto.
+/// </summary>
+public sealed record OrderFields(string Symbol, char Side, decimal Quantity, decimal Price);
+
+/// <summary>
 /// Regras de validação de campo, autoritativas no OrderAccumulator (ver ADR-0002).
-/// Recebe os campos já extraídos da mensagem FIX (Side ainda como char 1/2).
 /// Pura e sem dependência de QuickFIX — testável isoladamente.
 /// </summary>
 public static class OrderRules
@@ -19,23 +24,23 @@ public static class OrderRules
     public const char SideSell = '2';
 
     /// <summary>Retorna o motivo da rejeição, ou null se a ordem é válida.</summary>
-    public static string? Validate(string symbol, char side, decimal quantity, decimal price)
+    public static string? Validate(OrderFields order)
     {
-        if (!Symbols.Contains(symbol))
-            return $"Simbolo invalido '{symbol}'. Permitidos: {string.Join(", ", Symbols)}";
+        if (!Symbols.Contains(order.Symbol))
+            return $"Simbolo invalido '{order.Symbol}'. Permitidos: {string.Join(", ", Symbols)}";
 
-        if (side != SideBuy && side != SideSell)
-            return $"Lado invalido '{side}'. Permitidos: 1 (Compra) ou 2 (Venda)";
+        if (order.Side != SideBuy && order.Side != SideSell)
+            return $"Lado invalido '{order.Side}'. Permitidos: 1 (Compra) ou 2 (Venda)";
 
-        if (quantity != decimal.Truncate(quantity))
-            return $"Quantidade {quantity} deve ser inteira";
-        if (quantity <= 0 || quantity >= MaxQuantityExclusive)
-            return $"Quantidade {quantity} deve ser inteiro positivo menor que {MaxQuantityExclusive}";
+        if (order.Quantity != decimal.Truncate(order.Quantity))
+            return $"Quantidade {order.Quantity} deve ser inteira";
+        if (order.Quantity <= 0 || order.Quantity >= MaxQuantityExclusive)
+            return $"Quantidade {order.Quantity} deve ser inteiro positivo menor que {MaxQuantityExclusive}";
 
-        if (price <= 0 || price >= MaxPriceExclusive)
-            return $"Preco {price} deve ser positivo e menor que {MaxPriceExclusive}";
-        if (decimal.Round(price, 2) != price)
-            return $"Preco {price} deve ser multiplo de 0.01 (no maximo 2 casas decimais)";
+        if (order.Price <= 0 || order.Price >= MaxPriceExclusive)
+            return $"Preco {order.Price} deve ser positivo e menor que {MaxPriceExclusive}";
+        if (decimal.Round(order.Price, 2) != order.Price)
+            return $"Preco {order.Price} deve ser multiplo de 0.01 (no maximo 2 casas decimais)";
 
         return null;
     }

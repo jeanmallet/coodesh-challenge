@@ -21,15 +21,15 @@ public static class OrderValidation
     public static string? Validate(NewOrderRequest r)
     {
         if (!Symbols.Contains(r.Symbol))
-            return $"Simbolo invalido. Permitidos: {string.Join(", ", Symbols)}";
+            return $"Simbolo invalido '{r.Symbol}'. Permitidos: {string.Join(", ", Symbols)}";
         if (r.Side != SideBuy && r.Side != SideSell)
-            return "Lado invalido. Use 'Compra' ou 'Venda'";
+            return $"Lado invalido '{r.Side}'. Permitidos: {SideBuy} ou {SideSell}";
         if (r.Quantity <= 0 || r.Quantity >= MaxQuantityExclusive)
-            return $"Quantidade deve ser inteiro positivo menor que {MaxQuantityExclusive}";
+            return $"Quantidade {r.Quantity} deve ser inteiro positivo menor que {MaxQuantityExclusive}";
         if (r.Price <= 0 || r.Price >= MaxPriceExclusive)
-            return $"Preco deve ser positivo e menor que {MaxPriceExclusive}";
+            return $"Preco {r.Price} deve ser positivo e menor que {MaxPriceExclusive}";
         if (decimal.Round(r.Price, 2) != r.Price)
-            return "Preco deve ser multiplo de 0.01 (no maximo 2 casas decimais)";
+            return $"Preco {r.Price} deve ser multiplo de 0.01 (no maximo 2 casas decimais)";
         return null;
     }
 

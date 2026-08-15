@@ -48,13 +48,36 @@ public class AccumulatorApp(ILogger<AccumulatorApp> logger) : MessageCracker, IA
         Send(sessionID, clOrdId, fields, accepted: result.Accepted, text: text);
     }
 
+    private void Send(SessionID sessionID, string clOrdId, OrderFields fields, bool accepted, string text)
+    {
+        var message = BuildFIXMessage(clOrdId, fields, accepted, text);
+
+        try
+        {
+            Session.SendToTarget(message, sessionID);
+
+            logger.LogInformation("ExecutionReport {ClOrdId} -> {ExecType}: {Text}", 
+                clOrdId, 
+                accepted ? "New" : "Rejected", 
+                text);
+        }
+        catch (SessionNotFound ex)
+        {
+            logger.LogError(ex, "Session not found for ExecutionReport {ClOrdId}", clOrdId);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error occurred while sending ExecutionReport {ClOrdId}", clOrdId);
+        }
+    }
+
     private static OrderFields ExtractFields(QuickFix.FIX44.NewOrderSingle order) => new(
         Symbol: order.IsSetSymbol() ? order.Symbol.Value : "",
         Side: order.IsSetSide() ? order.Side.Value : '\0',
         Quantity: order.IsSetOrderQty() ? order.OrderQty.Value : 0m,
         Price: order.IsSetPrice() ? order.Price.Value : 0m);
 
-    private void Send(SessionID sessionID, string clOrdId, OrderFields fields, bool accepted, string text)
+    private QuickFix.FIX44.ExecutionReport BuildFIXMessage(string clOrdId, OrderFields fields, bool accepted, string text)
     {
         // Campos exigidos pelo dicionário FIX44 precisam de valores válidos mesmo na
         // rejeição por formato: usa fallbacks (símbolo/lado) só para o report ser bem-formado.
@@ -73,18 +96,19 @@ public class AccumulatorApp(ILogger<AccumulatorApp> logger) : MessageCracker, IA
             CumQty = new CumQty(accepted ? fields.Quantity : 0m),
             AvgPx = new AvgPx(accepted ? fields.Price : 0m),
         };
+
         report.Set(new ClOrdID(clOrdId));
         report.Set(new OrderQty(fields.Quantity));
+
         if (accepted)
         {
             report.Set(new LastQty(fields.Quantity));
             report.Set(new LastPx(fields.Price));
             report.Set(new Price(fields.Price));
         }
+
         report.Set(new Text(text));
 
-        Session.SendToTarget(report, sessionID);
-        logger.LogInformation("ExecutionReport {ClOrdId} -> {ExecType}: {Text}",
-            clOrdId, accepted ? "New" : "Rejected", text);
+        return report;
     }
 }

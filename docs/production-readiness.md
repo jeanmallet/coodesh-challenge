@@ -12,7 +12,7 @@ G = mais que isso). O que foi conscientemente deixado de fora está no fim, com 
 
 ## OrderGenerator (`src/OrderGenerator`)
 
-### 1. Nenhum teste
+### 1. Nenhum teste — ✅ resolvido
 
 **Hoje**: `tests/` tem um único projeto, o do Accumulator. `OrderValidation` não é
 exercitado por nada.
@@ -32,9 +32,11 @@ de fronteiras (0, negativo, 99.999, 100.000, 999,99, 1.000, 2+ casas decimais), 
 Include="...">`) para que uma divergência futura entre as duas validações apareça como
 teste vermelho, sem criar a lib compartilhada que o ADR-0002 rejeita.
 
-**Esforço**: P. **É o item de maior retorno do projeto inteiro.**
+**Esforço**: P. **É o item de maior retorno do projeto inteiro.** Feito em
+[`tests/OrderGenerator.Tests`](../tests/OrderGenerator.Tests), 20 testes cobrindo a mesma
+matriz de fronteiras mais `SideToFix`.
 
-### 2. `SessionNotFound` escapa como 500
+### 2. `SessionNotFound` escapa como 500 — ✅ resolvido
 
 **Hoje**: [`Program.cs:36`](../src/OrderGenerator/Program.cs) trata `InvalidOperationException`
 (sessão indisponível → 503) e `TimeoutException` (→ 504). Mas
@@ -52,7 +54,12 @@ o Generator não.
 `InvalidOperationException` já usada para sessão ausente — mantendo o mapeamento HTTP num
 lugar só.
 
-**Esforço**: P.
+**Esforço**: P. Feito em [`GeneratorApp.cs`](../src/OrderGenerator/GeneratorApp.cs):
+`catch (SessionNotFound ex)` antes do `catch (TimeoutException)`, relançando como
+`InvalidOperationException` — o `catch` já existente em `Program.cs:36` passa a cobrir o
+caso. Sem teste dedicado: reproduzir a janela exige derrubar a sessão FIX entre o check e
+o envio, o que pede mockar internals do QuickFIX por um custo desproporcional ao
+catch-and-rethrow de uma linha.
 
 ### 3. Initiator FIX fora do host
 
@@ -395,8 +402,8 @@ esquecimento.
 
 | # | Item | Projeto | Esforço | Por quê primeiro |
 |---|------|---------|---------|------------------|
-| 1 | Testes do Generator | Generator | P | Sustenta o ADR-0002; as cópias já divergem |
-| 2 | `SessionNotFound` → 503 | Generator | P | Defeito concreto, correção de uma linha |
+| 1 | Testes do Generator | Generator | P | ✅ feito — sustenta o ADR-0002 |
+| 2 | `SessionNotFound` → 503 | Generator | P | ✅ feito — defeito concreto, correção de uma linha |
 | 3 | try/catch em `OnMessage` | Accumulator | P | Uma ordem ruim não pode custar a sessão |
 | 4 | Generic Host + `IHostedService` | Accumulator | M | Shutdown em `SIGTERM`; base do compose |
 | 5 | Config externalizada | Generator | M | Destrava o container |

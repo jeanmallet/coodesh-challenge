@@ -50,6 +50,10 @@ public class GeneratorApp(ILogger<GeneratorApp> logger) : MessageCracker, IAppli
             Session.SendToTarget(order, session);
             return await tcs.Task.WaitAsync(timeout);
         }
+        catch (SessionNotFound ex)
+        {
+            throw new InvalidOperationException("Sessao FIX indisponivel. O OrderAccumulator esta rodando?", ex);
+        }
         catch (TimeoutException)
         {
             throw new TimeoutException("Sem resposta do OrderAccumulator dentro do tempo limite.");

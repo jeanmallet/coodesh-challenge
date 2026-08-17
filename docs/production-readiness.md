@@ -218,7 +218,7 @@ configuração sem código extra, e o `Program.cs` encolhe.
 
 **Esforço**: M. **Maior ganho estrutural deste projeto e pré-requisito do compose.**
 
-### 2. Exceção em `OnMessage` sobe para a engine
+### 2. Exceção em `OnMessage` sobe para a engine — ✅ resolvido
 
 **Hoje**: `FromApp` → `Crack` → `OnMessage` sem nenhum try/catch. Só o envio do
 `ExecutionReport` é protegido.
@@ -231,7 +231,11 @@ só descobre no timeout de 5s.
 **Proposta**: envolver o corpo de `OnMessage`; em exceção não prevista, logar e responder
 `Rejected` com texto genérico. Falha de uma ordem nunca deve custar a sessão.
 
-**Esforço**: P.
+**Esforço**: P. Feito em [`AccumulatorApp.cs`](../src/OrderAccumulator/AccumulatorApp.cs):
+o corpo de `OnMessage` está em try/catch, e qualquer exceção não prevista loga e responde
+`Rejected` (texto genérico) em vez de propagar. Sem teste dedicado: `OnMessage` está
+acoplado ao `MessageCracker`/`Session` do QuickFIX, a mesma limitação de testabilidade do
+item 6 abaixo — extrair a lógica de decisão resolveria os dois de uma vez.
 
 ### 3. Rejeição sem `OrdRejReason` (tag 103)
 
@@ -404,7 +408,7 @@ esquecimento.
 |---|------|---------|---------|------------------|
 | 1 | Testes do Generator | Generator | P | ✅ feito — sustenta o ADR-0002 |
 | 2 | `SessionNotFound` → 503 | Generator | P | ✅ feito — defeito concreto, correção de uma linha |
-| 3 | try/catch em `OnMessage` | Accumulator | P | Uma ordem ruim não pode custar a sessão |
+| 3 | try/catch em `OnMessage` | Accumulator | P | ✅ feito — uma ordem ruim não pode custar a sessão |
 | 4 | Generic Host + `IHostedService` | Accumulator | M | Shutdown em `SIGTERM`; base do compose |
 | 5 | Config externalizada | Generator | M | Destrava o container |
 | 6 | Health check | Generator | P | Destrava `depends_on: service_healthy` |

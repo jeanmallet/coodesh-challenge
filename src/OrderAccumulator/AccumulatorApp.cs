@@ -22,30 +22,41 @@ public class AccumulatorApp(ILogger<AccumulatorApp> logger) : MessageCracker, IA
 
     public void OnMessage(QuickFix.FIX44.NewOrderSingle order, SessionID sessionID)
     {
-        var clOrdId = order.ClOrdID.Value;
-        var fields = ExtractFields(order);
-
-        logger.LogInformation("NewOrderSingle {ClOrdId} {Symbol} side={Side} qty={Quantity} px={Price}",
-            clOrdId, fields.Symbol, fields.Side, fields.Quantity, fields.Price);
-
-        var error = OrderRules.Validate(fields);
-        if (error is not null)
+        var clOrdId = string.Empty;
+        try
         {
-            Send(sessionID, clOrdId, fields, accepted: false, text: error);
-            return;
+            clOrdId = order.ClOrdID.Value;
+            var fields = ExtractFields(order);
+
+            logger.LogInformation("NewOrderSingle {ClOrdId} {Symbol} side={Side} qty={Quantity} px={Price}",
+                clOrdId, fields.Symbol, fields.Side, fields.Quantity, fields.Price);
+
+            var error = OrderRules.Validate(fields);
+            if (error is not null)
+            {
+                Send(sessionID, clOrdId, fields, accepted: false, text: error);
+                return;
+            }
+
+            var result = _book.Evaluate(
+                symbol: fields.Symbol,
+                side: fields.Side == OrderRules.SideBuy ? OrderSide.Buy : OrderSide.Sell,
+                quantity: fields.Quantity,
+                price: fields.Price);
+
+            var text = result.Accepted
+                ? $"Aceita. Exposicao resultante {result.ResultingExposure:N2} para {fields.Symbol}"
+                : result.RejectReason!;
+
+            Send(sessionID, clOrdId, fields, accepted: result.Accepted, text: text);
         }
-
-        var result = _book.Evaluate(
-            symbol: fields.Symbol, 
-            side: fields.Side == OrderRules.SideBuy ? OrderSide.Buy : OrderSide.Sell,
-            quantity: fields.Quantity, 
-            price: fields.Price);
-
-        var text = result.Accepted
-            ? $"Aceita. Exposicao resultante {result.ResultingExposure:N2} para {fields.Symbol}"
-            : result.RejectReason!;
-
-        Send(sessionID, clOrdId, fields, accepted: result.Accepted, text: text);
+        catch (Exception ex)
+        {
+            // Falha inesperada no processamento de uma ordem não pode derrubar a sessão FIX
+            logger.LogError(ex, "Erro inesperado processando NewOrderSingle {ClOrdId}", clOrdId);
+            Send(sessionID, clOrdId, new OrderFields("", '\0', 0m, 0m), accepted: false,
+                text: "Erro interno ao processar a ordem");
+        }
     }
 
     private void Send(SessionID sessionID, string clOrdId, OrderFields fields, bool accepted, string text)
@@ -72,7 +83,7 @@ public class AccumulatorApp(ILogger<AccumulatorApp> logger) : MessageCracker, IA
     }
 
     private static OrderFields ExtractFields(QuickFix.FIX44.NewOrderSingle order) => new(
-        Symbol: order.IsSetSymbol() ? order.Symbol.Value : "",
+        Symbol: order.IsSetSymbol() ? order.Symbol.Value : string.Empty,
         Side: order.IsSetSide() ? order.Side.Value : '\0',
         Quantity: order.IsSetOrderQty() ? order.OrderQty.Value : 0m,
         Price: order.IsSetPrice() ? order.Price.Value : 0m);

@@ -1,6 +1,7 @@
 # Contexto de build = raiz do repo (precisa alcançar spec/FIX44.xml, compartilhado com o OrderAccumulator).
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
+COPY global.json Directory.Build.props Directory.Packages.props ./
 COPY spec/FIX44.xml spec/FIX44.xml
 COPY src/OrderGenerator/OrderGenerator.csproj src/OrderGenerator/
 RUN dotnet restore src/OrderGenerator/OrderGenerator.csproj

@@ -410,7 +410,7 @@ a página do formulário responde 200. Revisado (Standards + Spec, via skill `co
 antes do commit — sem violações; a única lacuna apontada foi esta mesma imprecisão do
 texto de proposta acima, já corrigida aqui.
 
-### 2. `Directory.Build.props`
+### 2. `Directory.Build.props` — ✅ resolvido
 
 **Hoje**: os três `.csproj` repetem `TargetFramework`, `Nullable` e `ImplicitUsings`. Nenhum
 analisador está ligado e warnings não quebram build.
@@ -419,9 +419,28 @@ analisador está ligado e warnings não quebram build.
 `EnforceCodeStyleInBuild` e `AnalysisMode=Recommended`. Esperar um pequeno lote de warnings
 na primeira execução — inclusive alguns de nulabilidade, o que é exatamente o ponto.
 
-**Esforço**: P (mais o tempo de limpar o que aparecer).
+**Esforço**: P (mais o tempo de limpar o que aparecer). Feito: `TargetFramework`/`Nullable`/
+`ImplicitUsings` saíram dos quatro `.csproj` para o `Directory.Build.props` da raiz, que
+também liga `TreatWarningsAsErrors`, `EnforceCodeStyleInBuild` e `AnalysisMode=Recommended`.
+Nulabilidade não gerou nada — os quatro `.csproj` já tinham `Nullable=enable`
+individualmente antes desta mudança, então centralizar não altera esse comportamento; um
+build limpo confirma zero `CS8xxx`. O lote de warnings apareceu no que o item não previu:
+`AnalysisMode=Recommended`, que liga analisadores de qualidade além de nulabilidade. E
+apareceu como *erros* de build, não avisos, porque
+`TreatWarningsAsErrors` está ligado desde o primeiro build: `CA1848`/`CA1873` (pedem
+`LoggerMessage` fonte-gerado em vez de `ILogger.LogX` direto) em toda chamada de log, e
+`CA1822` (`BuildFIXMessage` podia ser `static`). Corrigi o `CA1822` (mudança de uma
+palavra). Suprimi `CA1848`/`CA1873` via `NoWarn` com comentário explicando o motivo:
+são regras para logging em hot path de alto throughput, desproporcionais para o volume
+de log deste app — reescrever todo `ILogger.LogX` para o padrão fonte-gerado seria um
+refactor maior do que este item propõe. Também apareceu `CA1707` ("remova underscores do
+nome") em todo método de teste — é regra de nome de API pública, não de nome de teste
+(`Given_When_Then` é convenção, não descuido); suprimida só para os projetos de teste via
+[`tests/Directory.Build.props`](../tests/Directory.Build.props), que importa o da raiz e
+adiciona a supressão por cima. Build limpo: `0 Warning(s), 0 Error(s)`; os 45 testes e o
+`docker compose build --no-cache` continuam passando.
 
-### 3. `Directory.Packages.props` (Central Package Management)
+### 3. `Directory.Packages.props` (Central Package Management) — ✅ resolvido
 
 **Hoje**: `QuickFIXn.Core` e `QuickFIXn.FIX44` em `1.14.1` declarados em dois `.csproj`
 separados.
@@ -431,9 +450,14 @@ problema que aparece em runtime, não em build.
 
 **Proposta**: `<ManagePackageVersionsCentrally>` com todas as versões num arquivo.
 
-**Esforço**: P.
+**Esforço**: P. Feito: [`Directory.Packages.props`](../Directory.Packages.props) na raiz
+com as oito versões de pacote (`QuickFIXn.*`, `Microsoft.Extensions.*`, pacotes de teste);
+os quatro `.csproj` perderam o atributo `Version` de cada `PackageReference`. Os
+Dockerfiles precisaram copiar o arquivo para o contexto de build antes do `dotnet
+restore` — sem ele o MSBuild não encontra as versões e a build quebra dentro do
+container (não localmente, onde o arquivo já está no diretório pai).
 
-### 4. `global.json`
+### 4. `global.json` — ✅ resolvido
 
 **Hoje**: nada fixa a versão do SDK. O projeto usa .NET 10, mas qualquer SDK instalado
 compila.
@@ -441,9 +465,12 @@ compila.
 **Proposta**: `global.json` com `rollForward: latestFeature`. Também é o que garante
 build reproduzível dentro do container.
 
-**Esforço**: P.
+**Esforço**: P. Feito: [`global.json`](../global.json) fixa `10.0.100` com
+`rollForward: latestFeature` — a máquina de desenvolvimento tem três SDKs .NET 10
+instalados (`10.0.100-rc.1...`, `10.0.204`, `10.0.400`); sem isso, qual deles compila o
+projeto dependeria de qual estivesse mais recente no PATH.
 
-### 5. `.editorconfig`
+### 5. `.editorconfig` — ✅ resolvido
 
 **Hoje**: não existe. O estilo do código é consistente, mas por disciplina, não por
 ferramenta.
@@ -454,15 +481,18 @@ tem o que aplicar.
 **Proposta**: `.editorconfig` de .NET registrando o estilo já praticado (expression-bodied
 members, `var`, `namespace` file-scoped, ordenação de usings).
 
-**Esforço**: P.
+**Esforço**: P. Feito: [`.editorconfig`](../.editorconfig) na raiz, registrando o que já
+era praticado (não mudando estilo): `namespace` file-scoped, `var`, membros
+expression-bodied de uma linha, `using` fora do namespace com `System` primeiro.
 
-### 6. README
+### 6. README — ✅ resolvido
 
 Atualizar a seção "Como executar" com o caminho do compose depois que ele existir,
 mantendo o `dotnet run` como alternativa. O aviso das duas portas passa a ser nota de
 rodapé em vez de destaque.
 
-**Esforço**: P.
+**Esforço**: P. Feito junto com o item 1 (docker-compose), no mesmo commit — o
+`README.md` já tinha que mudar para documentar a via nova.
 
 ---
 
@@ -505,7 +535,7 @@ esquecimento.
 | 8 | `innerHTML` + duplo submit | Generator | P | ✅ feito — baratos e visíveis na avaliação |
 | 9 | `ProblemDetails` | Generator | P | ✅ feito — contrato de erro estável |
 | 10 | `OrdRejReason` (103) | Accumulator | P | ✅ feito — correção de protocolo FIX |
-| 11 | Higiene de build (2–5 da Infra) | Infra | P | Melhor em lote, depois do resto |
+| 11 | Higiene de build (2–5 da Infra) | Infra | P | ✅ feito — melhor em lote, depois do resto |
 
 Os itens 1–3 são independentes e podem ir juntos. Os itens 4–7 formam uma corrente: o
 compose depende dos três anteriores.

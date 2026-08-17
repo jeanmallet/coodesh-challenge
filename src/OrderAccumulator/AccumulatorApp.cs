@@ -89,7 +89,7 @@ public class AccumulatorApp(ILogger<AccumulatorApp> logger) : MessageCracker, IA
         Quantity: order.IsSetOrderQty() ? order.OrderQty.Value : 0m,
         Price: order.IsSetPrice() ? order.Price.Value : 0m);
 
-    private QuickFix.FIX44.ExecutionReport BuildFIXMessage(string clOrdId, OrderFields fields, bool accepted, string text, int? ordRejReason)
+    private static QuickFix.FIX44.ExecutionReport BuildFIXMessage(string clOrdId, OrderFields fields, bool accepted, string text, int? ordRejReason)
     {
         // Campos exigidos pelo dicionário FIX44 precisam de valores válidos mesmo na
         // rejeição por formato: usa fallbacks (símbolo/lado) só para o report ser bem-formado.

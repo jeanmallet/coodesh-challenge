@@ -114,6 +114,14 @@ O console também mostra eventos de sessão (`<event> Received logon`, etc.) jun
 logs de aplicação; os dumps completos de mensagem (incluindo heartbeat a cada 30s) só
 vão para o arquivo, para não poluir `docker compose logs`.
 
+## Rate limiting
+
+`POST /api/orders` (único endpoint HTTP externo) tem rate limiting nativo do ASP.NET
+Core: **10 requisições / 10s por IP** (fixed window, sem fila — excedente responde
+imediatamente), configurável em `OrderGenerator:RateLimit` no `appsettings.json`.
+Excedido o limite, a resposta é `429` no mesmo formato `ProblemDetails` dos outros erros
+do endpoint. `/health` não é afetado.
+
 ## Testes
 
 ```bash

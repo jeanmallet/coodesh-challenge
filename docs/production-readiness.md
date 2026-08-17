@@ -231,6 +231,26 @@ entrada/saída do endpoint.
 
 **Esforço**: P.
 
+### 12. Rate limiting em `POST /api/orders` — ✅ resolvido
+
+**Hoje**: nenhum limite de requisições — um cliente em loop podia bater no endpoint sem
+restrição alguma, cada tentativa virando uma ordem de verdade contabilizada na exposição.
+
+**Risco**: é o único endpoint HTTP externo do sistema; sem limite, é o vetor óbvio de
+abuso (acidental ou não) contra o `OrderAccumulator` por trás dele.
+
+**Proposta**: rate limiting nativo do ASP.NET Core (`Microsoft.AspNetCore.RateLimiting`,
+sem pacote extra), só nesse endpoint.
+
+**Esforço**: P. Feito: fixed window por IP do cliente, **10 requisições/10s**,
+`QueueLimit=0` (rejeita na hora, sem enfileirar), configurável via
+`OrderGenerator:RateLimit:PermitLimit`/`:WindowSeconds` no `appsettings.json`. Excedido o
+limite, responde `429` no mesmo formato `ProblemDetails` dos outros erros do endpoint
+(`OnRejected` customizado). `/health` fica de fora do limite. Verificado com Docker real:
+12 requisições em sequência devolvem `200` nas 10 primeiras e `429` nas duas seguintes,
+com corpo `{"title":"Muitas requisicoes","status":429,...}`; 15 requisições seguidas a
+`/health` devolvem `200` em todas, confirmando que não é afetado.
+
 ---
 
 ## OrderAccumulator (`src/OrderAccumulator`)
@@ -557,7 +577,7 @@ esquecimento.
 - **Autenticação de sessão.** `ToAdmin`/`FromAdmin` estão vazios nos dois lados: nenhuma
   validação de credenciais no Logon (tags 553/554) e nenhuma whitelist de `CompID`. Qualquer
   processo que alcance a porta 5001 pode abrir sessão.
-- **Rate limiting** em `POST /api/orders` e **métricas/OpenTelemetry** nos dois processos.
+- **Métricas/OpenTelemetry** nos dois processos.
 - **CI.** Excluído por decisão explícita nesta rodada — um workflow de `build` + `test` é o
   passo natural seguinte ao compose.
 
@@ -579,6 +599,7 @@ esquecimento.
 | 10 | `OrdRejReason` (103) | Accumulator | P | ✅ feito — correção de protocolo FIX |
 | 11 | Higiene de build (2–5 da Infra) | Infra | P | ✅ feito — melhor em lote, depois do resto |
 | 12 | Log de mensagens FIX | Infra | P | ✅ feito — trilha de auditoria, ausente de "fora de escopo" |
+| 13 | Rate limiting `POST /api/orders` | Generator | P | ✅ feito — único endpoint HTTP externo, sem limite algum |
 
 Os itens 1–3 são independentes e podem ir juntos. Os itens 4–7 formam uma corrente: o
 compose depende dos três anteriores.

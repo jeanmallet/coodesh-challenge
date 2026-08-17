@@ -1,3 +1,6 @@
+using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using QuickFix;
 using QuickFix.Store;
 using OrderGenerator;
@@ -6,8 +9,36 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSingleton<GeneratorApp>();
 builder.Services.AddHealthChecks().AddCheck<FixSessionHealthCheck>("fix-session");
 builder.Services.AddProblemDetails();
+
+// Fixed window por IP: protege POST /api/orders sem afetar /health.
+var rateLimitPermitLimit = builder.Configuration.GetValue("OrderGenerator:RateLimit:PermitLimit", 10);
+var rateLimitWindowSeconds = builder.Configuration.GetValue("OrderGenerator:RateLimit:WindowSeconds", 10);
+builder.Services.AddRateLimiter(options =>
+{
+    options.OnRejected = (context, cancellationToken) =>
+    {
+        context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+        return new ValueTask(context.HttpContext.Response.WriteAsJsonAsync(new ProblemDetails
+        {
+            Title = "Muitas requisicoes",
+            Status = StatusCodes.Status429TooManyRequests,
+            Detail = "Limite de requisicoes excedido. Tente novamente em instantes.",
+        }, cancellationToken));
+    };
+    options.AddPolicy("orders", httpContext => RateLimitPartition.GetFixedWindowLimiter(
+        partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        factory: _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = rateLimitPermitLimit,
+            Window = TimeSpan.FromSeconds(rateLimitWindowSeconds),
+            QueueLimit = 0,
+        }));
+});
+
 var app = builder.Build();
 app.UseExceptionHandler();
+
+app.UseRateLimiter();
 
 // Initiator FIX 4.4 embutido no processo web.
 // Config referencia FIX44.xml por caminho relativo; ancora o cwd no dir do binário.
@@ -69,6 +100,6 @@ app.MapPost("/api/orders", async (NewOrderRequest req) =>
     {
         return Results.Problem(detail: ex.Message, statusCode: StatusCodes.Status504GatewayTimeout, title: "Tempo limite excedido");
     }
-});
+}).RequireRateLimiting("orders");
 
 app.Run();

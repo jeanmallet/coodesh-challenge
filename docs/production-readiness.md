@@ -198,7 +198,7 @@ entrada/saída do endpoint.
 
 ## OrderAccumulator (`src/OrderAccumulator`)
 
-### 1. Sem Generic Host — e sem shutdown limpo em `SIGTERM`
+### 1. Sem Generic Host — e sem shutdown limpo em `SIGTERM` — ✅ resolvido
 
 **Hoje**: [`Program.cs`](../src/OrderAccumulator/Program.cs) monta tudo à mão:
 `LoggerFactory.Create`, `new AccumulatorApp(...)`, `ThreadedSocketAcceptor` direto, e um
@@ -216,7 +216,12 @@ entrada/saída do endpoint.
 O host trata `SIGTERM` e `SIGINT` de fábrica, dá `IHostApplicationLifetime`, logging e
 configuração sem código extra, e o `Program.cs` encolhe.
 
-**Esforço**: M. **Maior ganho estrutural deste projeto e pré-requisito do compose.**
+**Esforço**: M. **Maior ganho estrutural deste projeto e pré-requisito do compose.** Feito:
+`Program.cs` migrado para `Host.CreateApplicationBuilder`; o acceptor foi encapsulado em
+[`AccumulatorHostedService`](../src/OrderAccumulator/AccumulatorHostedService.cs)
+(`IHostedService` + `IDisposable`), registrado via DI junto com `AccumulatorApp`. O host
+trata `SIGTERM`/`SIGINT` de fábrica — verificado subindo o processo e enviando `SIGTERM`:
+`StopAsync` roda, o acceptor faz logout e o processo termina sem travar.
 
 ### 2. Exceção em `OnMessage` sobe para a engine — ✅ resolvido
 
@@ -409,7 +414,7 @@ esquecimento.
 | 1 | Testes do Generator | Generator | P | ✅ feito — sustenta o ADR-0002 |
 | 2 | `SessionNotFound` → 503 | Generator | P | ✅ feito — defeito concreto, correção de uma linha |
 | 3 | try/catch em `OnMessage` | Accumulator | P | ✅ feito — uma ordem ruim não pode custar a sessão |
-| 4 | Generic Host + `IHostedService` | Accumulator | M | Shutdown em `SIGTERM`; base do compose |
+| 4 | Generic Host + `IHostedService` | Accumulator | M | ✅ feito — shutdown em `SIGTERM`; base do compose |
 | 5 | Config externalizada | Generator | M | Destrava o container |
 | 6 | Health check | Generator | P | Destrava `depends_on: service_healthy` |
 | 7 | `docker-compose` | Infra | M | Maior ganho de operabilidade |

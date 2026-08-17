@@ -108,7 +108,7 @@ prevalece mesmo sobre `ASPNETCORE_URLS`. Na prática isso significa que o
 que o `dotnet run` abre no browser — inofensivo aqui porque `0.0.0.0` também aceita
 `localhost`, mas documentado para não confundir quem olhar os dois arquivos depois.
 
-### 5. Erro sem contrato
+### 5. Erro sem contrato — ✅ resolvido
 
 **Hoje**: erros saem como `{ "error": "..." }` ad-hoc, em três formatos de resposta
 diferentes (`BadRequest`, `Json` com 503, `Json` com 504). Não há exception handler global.
@@ -120,7 +120,16 @@ esta página não tem contrato de erro estável para programar contra.
 **Proposta**: `AddProblemDetails()` + `Results.Problem`/`Results.ValidationProblem`
 (RFC 7807), mais `UseExceptionHandler` como rede. O `index.html` passa a ler `detail`/`title`.
 
-**Esforço**: P.
+**Esforço**: P. Feito: `builder.Services.AddProblemDetails()` + `app.UseExceptionHandler()`
+como rede para exceção não tratada; os três retornos do endpoint (`400`, `503`, `504`)
+viraram `Results.Problem(detail:, statusCode:, title:)`. `Results.ValidationProblem` não
+se aplicou — ele espera um dicionário de erros por campo, e `OrderValidation.Validate`
+devolve um motivo único em texto livre; `Results.Problem` já é RFC 7807 sem forçar essa
+forma. `index.html` passa a ler `title`/`detail` em vez de `error`. Verificado em runtime:
+os três status devolvem o corpo `{type, title, status, detail, traceId}`, e no browser
+real (sem Accumulator de pé) a página mostra "Sessao FIX indisponivel: Sessao FIX
+indisponivel. O OrderAccumulator esta rodando?" corretamente montado a partir de
+`title`+`detail`.
 
 ### 6. `Directory.SetCurrentDirectory` muda estado global
 
@@ -484,7 +493,7 @@ esquecimento.
 | 6 | Health check | Generator | P | ✅ feito — destrava `depends_on: service_healthy` |
 | 7 | `docker-compose` | Infra | M | ✅ feito — maior ganho de operabilidade |
 | 8 | `innerHTML` + duplo submit | Generator | P | ✅ feito — baratos e visíveis na avaliação |
-| 9 | `ProblemDetails` | Generator | P | Contrato de erro estável |
+| 9 | `ProblemDetails` | Generator | P | ✅ feito — contrato de erro estável |
 | 10 | `OrdRejReason` (103) | Accumulator | P | Correção de protocolo FIX |
 | 11 | Higiene de build (2–5 da Infra) | Infra | P | Melhor em lote, depois do resto |
 

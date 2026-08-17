@@ -5,7 +5,9 @@ using OrderGenerator;
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSingleton<GeneratorApp>();
 builder.Services.AddHealthChecks().AddCheck<FixSessionHealthCheck>("fix-session");
+builder.Services.AddProblemDetails();
 var app = builder.Build();
+app.UseExceptionHandler();
 
 // Initiator FIX 4.4 embutido no processo web.
 // Config referencia FIX44.xml por caminho relativo; ancora o cwd no dir do binário.
@@ -48,7 +50,7 @@ app.MapPost("/api/orders", async (NewOrderRequest req) =>
     // Validação autoritativa de formato no gerador: entrada inválida nunca vira FIX.
     var error = OrderValidation.Validate(req);
     if (error is not null)
-        return Results.BadRequest(new { error });
+        return Results.Problem(detail: error, statusCode: StatusCodes.Status400BadRequest, title: "Ordem invalida");
 
     try
     {
@@ -57,11 +59,11 @@ app.MapPost("/api/orders", async (NewOrderRequest req) =>
     }
     catch (InvalidOperationException ex)   // sessão FIX indisponível
     {
-        return Results.Json(new { error = ex.Message }, statusCode: 503);
+        return Results.Problem(detail: ex.Message, statusCode: StatusCodes.Status503ServiceUnavailable, title: "Sessao FIX indisponivel");
     }
     catch (TimeoutException ex)
     {
-        return Results.Json(new { error = ex.Message }, statusCode: 504);
+        return Results.Problem(detail: ex.Message, statusCode: StatusCodes.Status504GatewayTimeout, title: "Tempo limite excedido");
     }
 });
 

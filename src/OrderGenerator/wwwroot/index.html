@@ -86,7 +86,8 @@
 
         if (!res.ok) {
           box.className = 'error';
-          renderError(data.error ?? ('HTTP ' + res.status));
+          // Resposta segue RFC 7807 (ProblemDetails): title + detail, não mais { error }.
+          renderError((data.title ? data.title + ': ' : '') + (data.detail ?? ('HTTP ' + res.status)));
           return;
         }
 

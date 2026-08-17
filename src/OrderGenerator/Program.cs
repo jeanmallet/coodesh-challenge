@@ -14,14 +14,20 @@ var settings = new SessionSettings(Path.Combine(AppContext.BaseDirectory, "gener
 
 // Sobrescreve o alvo FIX quando configurado (ex.: OrderGenerator__Fix__SocketConnectHost
 // em container, onde 127.0.0.1 do generator.cfg não alcança o serviço do Accumulator).
+// Precisa mutar o dicionário por sessão, não o [DEFAULT]: SessionSettings já mescla os
+// dois na leitura do .cfg, então uma sessão já existente não herda mudança no default.
+// Get(sessionId) devolve o dicionário vivo (SettingsDictionary é referência) — mutar
+// basta; Set(sessionId, ...) rejeitaria com "Duplicate Session" para uma já existente.
 var fixHost = app.Configuration["OrderGenerator:Fix:SocketConnectHost"];
 var fixPort = app.Configuration["OrderGenerator:Fix:SocketConnectPort"];
 if (fixHost is not null || fixPort is not null)
 {
-    var defaults = settings.Get();
-    if (fixHost is not null) defaults.SetString("SocketConnectHost", fixHost);
-    if (fixPort is not null) defaults.SetString("SocketConnectPort", fixPort);
-    settings.Set(defaults);
+    foreach (var sessionId in settings.GetSessions())
+    {
+        var sessionSettings = settings.Get(sessionId);
+        if (fixHost is not null) sessionSettings.SetString("SocketConnectHost", fixHost);
+        if (fixPort is not null) sessionSettings.SetString("SocketConnectPort", fixPort);
+    }
 }
 
 var loggerFactory = app.Services.GetRequiredService<ILoggerFactory>();

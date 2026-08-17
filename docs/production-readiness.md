@@ -94,15 +94,19 @@ container. **Habilita o item de infra.**
 
 **Esforço**: M. Feito, mais enxuto do que a proposta original (sem `IOptions<>`, que seria
 ceremônia para um script top-level lido uma vez): removido o `UseUrls` — a porta passa a
-vir da chave nativa `Urls` do ASP.NET Core (`appsettings.json` como default, com
-`launchSettings.json`/`ASPNETCORE_URLS` sobrescrevendo em dev, sem vencedor oculto). O
-timeout do endpoint vem de `OrderGenerator:OrderTimeoutSeconds`. O host/porta FIX podem
-ser sobrescritos via `OrderGenerator:Fix:SocketConnectHost`/`:SocketConnectPort`
+vir da chave nativa `Urls` do ASP.NET Core, hoje `http://0.0.0.0:5080` no
+`appsettings.json`. O timeout do endpoint vem de `OrderGenerator:OrderTimeoutSeconds`. O
+host/porta FIX podem ser sobrescritos via `OrderGenerator:Fix:SocketConnectHost`/`:SocketConnectPort`
 (`OrderGenerator__Fix__SocketConnectHost` como env var), aplicados sobre o
-`SessionSettings` carregado do `.cfg` via `SettingsDictionary.SetString`. Verificado em
-runtime: subindo o `.dll` publicado direto (sem `launchSettings`), a porta 5080 vem só do
-`appsettings.json`; com `launchSettings`, o `ASPNETCORE_URLS` de lá continua prevalecendo
-como antes.
+`SessionSettings` carregado do `.cfg` via `SettingsDictionary.SetString`.
+
+Correção sobre a verificação original: testei o mapeamento de precedência assumindo o
+padrão documentado do ASP.NET Core (`ASPNETCORE_URLS`/env var vence `appsettings.json`) e
+estava errado — validado no item 7 (docker-compose) abaixo, `Urls` do `appsettings.json`
+prevalece mesmo sobre `ASPNETCORE_URLS`. Na prática isso significa que o
+`applicationUrl` do `launchSettings.json` não controla mais o bind do Kestrel, só o alvo
+que o `dotnet run` abre no browser — inofensivo aqui porque `0.0.0.0` também aceita
+`localhost`, mas documentado para não confundir quem olhar os dois arquivos depois.
 
 ### 5. Erro sem contrato
 
@@ -322,7 +326,7 @@ possível, **não como ação** — mexer aqui é risco sem retorno.
 
 ## Solução / Infraestrutura
 
-### 1. `docker-compose` — a maior melhoria operacional
+### 1. `docker-compose` — a maior melhoria operacional — ✅ resolvido
 
 **Hoje**: o [README](../README.md) instrui abrir dois terminais em ordem específica, e ainda
 precisa de um aviso em destaque para o usuário não confundir a porta web (5080) com o
@@ -340,7 +344,44 @@ Generator).
 **Ordem de execução**: item 4 e 8 do Generator e item 1 do Accumulator vêm antes — sem
 eles o compose funciona mal (sem sonda e sem shutdown limpo).
 
-**Esforço**: M.
+**Esforço**: M. Feito, com uma correção em relação à proposta acima: o `depends_on` não
+usa o health check do Generator (item 8) — o Generator não tem como estar saudável antes
+do Accumulator sequer existir. Em vez disso, [`src/OrderAccumulator/Dockerfile`](../src/OrderAccumulator/Dockerfile)
+define um `HEALTHCHECK` próprio (sonda TCP na porta 5001 via `/dev/tcp` do bash, já
+presente na imagem base, sem instalar netcat só para isso), e é esse que o
+[`compose.yaml`](../compose.yaml) espera antes de subir o Generator.
+[`src/OrderGenerator/Dockerfile`](../src/OrderGenerator/Dockerfile) também define
+`HEALTHCHECK` sobre `/health` (instala `curl`, ausente na imagem base) — não gate de
+ordem, mas visibilidade em `docker ps`.
+
+Duas correções que a proposta original não previa, mas que são necessárias para o compose
+funcionar de verdade e não puramente cosméticas:
+- **`SocketAcceptHost=127.0.0.1` → `0.0.0.0`** em [`accumulator.cfg`](../src/OrderAccumulator/accumulator.cfg):
+  bind em loopback é inalcançável de outro container.
+- **`Urls`: `localhost` → `0.0.0.0`** em [`appsettings.json`](../src/OrderGenerator/appsettings.json):
+  mesmo problema do lado do Kestrel — o mapeamento de porta do host não alcança um bind
+  em loopback dentro do container. Achado no processo: `ASPNETCORE_URLS` (env var) **não**
+  vence o `Urls` do `appsettings.json` neste setup — supus a precedência padrão do
+  ASP.NET Core e a validação em runtime provou o contrário, então a correção foi mudar o
+  valor default em vez de depender de override por env var. Isso também corrige o item 5
+  acima: o `applicationUrl` do `launchSettings.json` não controla mais o bind do Kestrel
+  (só o alvo do browser automático do `dotnet run`, que continua funcionando porque
+  `0.0.0.0` aceita `localhost`).
+
+Também achei e corrigi um bug real ao ligar o override de host FIX (item 5) com o compose:
+`SessionSettings.Get()` devolve o dicionário `[DEFAULT]`, mas o QuickFIXn já mescla
+default+sessão na leitura do `.cfg` — mudar o default depois não propaga para uma sessão
+já existente. [`Program.cs`](../src/OrderGenerator/Program.cs) agora itera
+`settings.GetSessions()` e muta o dicionário de cada sessão diretamente.
+
+Verificado de ponta a ponta com Docker real (`docker compose up --build`): os dois
+serviços sobem, `accumulator` fica `healthy` primeiro, `generator` só inicia depois
+(`depends_on`), fica `healthy` após o logon FIX, e uma ordem via
+`curl http://localhost:5080/api/orders` do host completa o round-trip FIX normalmente
+(aceite com exposição calculada). `/health` responde 200; símbolo inválido responde 400;
+a página do formulário responde 200. Revisado (Standards + Spec, via skill `code-review`)
+antes do commit — sem violações; a única lacuna apontada foi esta mesma imprecisão do
+texto de proposta acima, já corrigida aqui.
 
 ### 2. `Directory.Build.props`
 
@@ -433,7 +474,7 @@ esquecimento.
 | 4 | Generic Host + `IHostedService` | Accumulator | M | ✅ feito — shutdown em `SIGTERM`; base do compose |
 | 5 | Config externalizada | Generator | M | ✅ feito — destrava o container |
 | 6 | Health check | Generator | P | ✅ feito — destrava `depends_on: service_healthy` |
-| 7 | `docker-compose` | Infra | M | Maior ganho de operabilidade |
+| 7 | `docker-compose` | Infra | M | ✅ feito — maior ganho de operabilidade |
 | 8 | `innerHTML` + duplo submit | Generator | P | Baratos e visíveis na avaliação |
 | 9 | `ProblemDetails` | Generator | P | Contrato de erro estável |
 | 10 | `OrdRejReason` (103) | Accumulator | P | Correção de protocolo FIX |

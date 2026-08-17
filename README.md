@@ -52,6 +52,21 @@ glossário do domínio em [`CONTEXT.md`](CONTEXT.md).
 
 ## Como executar
 
+### Via Docker Compose
+
+Pré-requisito: Docker com Compose v2.
+
+```bash
+docker compose up --build
+```
+
+Sobe os dois serviços na ordem certa (`generator` espera o *healthcheck* do
+`accumulator` antes de conectar) e expõe **`http://localhost:5080`**. A porta FIX
+5001 fica só na rede interna do Compose — o formulário web é a única porta publicada
+no host.
+
+### Via `dotnet run`
+
 Pré-requisito: [.NET 10 SDK](https://dotnet.microsoft.com/download).
 
 Abra **dois terminais** na raiz do repositório.
@@ -71,9 +86,9 @@ Abra **dois terminais** na raiz do repositório.
 3. Abra **`http://localhost:5080`** no browser, preencha o formulário e envie. A
    resposta do `ExecutionReport` aparece na própria página.
 
-> ⚠️ **Duas portas distintas:** `5080` é a **página web** (OrderGenerator, HTTP).
-> `5001` é o **socket FIX** do OrderAccumulator (TCP puro) — abrir `5001` no browser
-> trava em loading, pois não é um servidor web. Use sempre `5080` na UI.
+> `5080` é a **página web** (OrderGenerator, HTTP). `5001` é o **socket FIX** do
+> OrderAccumulator (TCP puro) — abrir `5001` no browser trava em loading, pois não é
+> um servidor web. Use sempre `5080` na UI.
 
 > O gerador reconecta sozinho se o acumulador ainda não estiver no ar. O estado é em
 > memória: reiniciar o acumulador zera a exposição.

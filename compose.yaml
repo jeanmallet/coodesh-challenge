@@ -1,0 +1,20 @@
+services:
+  accumulator:
+    build:
+      context: .
+      dockerfile: src/OrderAccumulator/Dockerfile
+    # HEALTHCHECK definido no Dockerfile (sonda a porta FIX 5001) — usado pelo
+    # depends_on abaixo para não deixar o generator conectar cedo demais.
+
+  generator:
+    build:
+      context: .
+      dockerfile: src/OrderGenerator/Dockerfile
+    ports:
+      - "5080:5080"
+    environment:
+      # O alvo FIX troca de 127.0.0.1 (do generator.cfg) para o nome do serviço.
+      OrderGenerator__Fix__SocketConnectHost: accumulator
+    depends_on:
+      accumulator:
+        condition: service_healthy

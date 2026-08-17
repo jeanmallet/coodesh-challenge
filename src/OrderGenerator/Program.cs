@@ -3,14 +3,25 @@ using QuickFix.Store;
 using OrderGenerator;
 
 var builder = WebApplication.CreateBuilder(args);
-// Porta web fixa e distinta da porta FIX (5001), para não confundir a UI com o socket FIX.
-builder.WebHost.UseUrls("http://localhost:5080");
 var app = builder.Build();
 
 // Initiator FIX 4.4 embutido no processo web.
 // Config referencia FIX44.xml por caminho relativo; ancora o cwd no dir do binário.
 Directory.SetCurrentDirectory(AppContext.BaseDirectory);
 var settings = new SessionSettings(Path.Combine(AppContext.BaseDirectory, "generator.cfg"));
+
+// Sobrescreve o alvo FIX quando configurado (ex.: OrderGenerator__Fix__SocketConnectHost
+// em container, onde 127.0.0.1 do generator.cfg não alcança o serviço do Accumulator).
+var fixHost = app.Configuration["OrderGenerator:Fix:SocketConnectHost"];
+var fixPort = app.Configuration["OrderGenerator:Fix:SocketConnectPort"];
+if (fixHost is not null || fixPort is not null)
+{
+    var defaults = settings.Get();
+    if (fixHost is not null) defaults.SetString("SocketConnectHost", fixHost);
+    if (fixPort is not null) defaults.SetString("SocketConnectPort", fixPort);
+    settings.Set(defaults);
+}
+
 var loggerFactory = app.Services.GetRequiredService<ILoggerFactory>();
 var fixApp = new GeneratorApp(loggerFactory.CreateLogger<GeneratorApp>());
 var storeFactory = new MemoryStoreFactory();
@@ -21,6 +32,8 @@ app.Lifetime.ApplicationStopping.Register(() => initiator.Stop());
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
+var orderTimeout = TimeSpan.FromSeconds(app.Configuration.GetValue("OrderGenerator:OrderTimeoutSeconds", 5));
+
 app.MapPost("/api/orders", async (NewOrderRequest req) =>
 {
     // Validação autoritativa de formato no gerador: entrada inválida nunca vira FIX.
@@ -30,7 +43,7 @@ app.MapPost("/api/orders", async (NewOrderRequest req) =>
 
     try
     {
-        var result = await fixApp.SendOrderAsync(req, TimeSpan.FromSeconds(5));
+        var result = await fixApp.SendOrderAsync(req, orderTimeout);
         return Results.Ok(result);
     }
     catch (InvalidOperationException ex)   // sessão FIX indisponível

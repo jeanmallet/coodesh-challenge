@@ -77,7 +77,7 @@ a receber `GeneratorApp` por injeção em vez de capturar a variável local.
 
 **Esforço**: M.
 
-### 4. Configuração hardcoded
+### 4. Configuração hardcoded — ✅ resolvido
 
 **Hoje**: `builder.WebHost.UseUrls("http://localhost:5080")` no código — que ainda por cima
 sobrepõe o `applicationUrl` do `launchSettings.json`, duplicando a mesma informação em dois
@@ -92,7 +92,17 @@ binding via `IOptions<>`; remover o `UseUrls` do código; sobrescrever o host FI
 `SessionSettings` a partir da configuração, para que uma env var resolva o caso do
 container. **Habilita o item de infra.**
 
-**Esforço**: M.
+**Esforço**: M. Feito, mais enxuto do que a proposta original (sem `IOptions<>`, que seria
+ceremônia para um script top-level lido uma vez): removido o `UseUrls` — a porta passa a
+vir da chave nativa `Urls` do ASP.NET Core (`appsettings.json` como default, com
+`launchSettings.json`/`ASPNETCORE_URLS` sobrescrevendo em dev, sem vencedor oculto). O
+timeout do endpoint vem de `OrderGenerator:OrderTimeoutSeconds`. O host/porta FIX podem
+ser sobrescritos via `OrderGenerator:Fix:SocketConnectHost`/`:SocketConnectPort`
+(`OrderGenerator__Fix__SocketConnectHost` como env var), aplicados sobre o
+`SessionSettings` carregado do `.cfg` via `SettingsDictionary.SetString`. Verificado em
+runtime: subindo o `.dll` publicado direto (sem `launchSettings`), a porta 5080 vem só do
+`appsettings.json`; com `launchSettings`, o `ASPNETCORE_URLS` de lá continua prevalecendo
+como antes.
 
 ### 5. Erro sem contrato
 
@@ -415,7 +425,7 @@ esquecimento.
 | 2 | `SessionNotFound` → 503 | Generator | P | ✅ feito — defeito concreto, correção de uma linha |
 | 3 | try/catch em `OnMessage` | Accumulator | P | ✅ feito — uma ordem ruim não pode custar a sessão |
 | 4 | Generic Host + `IHostedService` | Accumulator | M | ✅ feito — shutdown em `SIGTERM`; base do compose |
-| 5 | Config externalizada | Generator | M | Destrava o container |
+| 5 | Config externalizada | Generator | M | ✅ feito — destrava o container |
 | 6 | Health check | Generator | P | Destrava `depends_on: service_healthy` |
 | 7 | `docker-compose` | Infra | M | Maior ganho de operabilidade |
 | 8 | `innerHTML` + duplo submit | Generator | P | Baratos e visíveis na avaliação |

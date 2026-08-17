@@ -5,5 +5,6 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/OrderAccumulator.Tests/OrderAccumulator.Tests.csproj" />
+    <Project Path="tests/OrderGenerator.Tests/OrderGenerator.Tests.csproj" />
   </Folder>
 </Solution>

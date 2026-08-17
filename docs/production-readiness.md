@@ -494,6 +494,50 @@ rodapé em vez de destaque.
 **Esforço**: P. Feito junto com o item 1 (docker-compose), no mesmo commit — o
 `README.md` já tinha que mudar para documentar a via nova.
 
+### 7. Log de mensagens FIX — ✅ resolvido
+
+**Hoje**: só existia log de aplicação (`ILogger` → console); nenhuma trilha das mensagens
+FIX cruas (Logon, NewOrderSingle, ExecutionReport) ficava gravada em disco.
+
+**Risco**: sem essa trilha não há como auditar/reproduzir um incidente depois do fato —
+o `docker compose logs` só mostra o que a aplicação decidiu logar, não a mensagem exata
+que passou no wire.
+
+**Proposta**: `QuickFix.Logger.FileLogFactory`, disponível nativamente no QuickFIXn.
+
+**Esforço**: P. Feito: os dois processos trocaram o overload de `SocketInitiator`/
+`ThreadedSocketAcceptor` que recebia `ILoggerFactory` (integração com
+`Microsoft.Extensions.Logging`) pelo overload `ILogFactory`, passando um
+`CompositeLogFactory([ScreenLogFactory(settings), FileLogFactory(settings)])` — os dois
+mecanismos de log do QuickFIXn são mutuamente exclusivos por sessão, então não dá para
+manter o `ILoggerFactory` e adicionar `FileLogFactory` ao mesmo tempo. Os
+`logger.LogInformation` da aplicação (`GeneratorApp`/`AccumulatorApp`) não mudaram — eles
+usam `ILogger` injetado via DI normalmente, independente dessa troca.
+[`generator.cfg`](../src/OrderGenerator/generator.cfg) e
+[`accumulator.cfg`](../src/OrderAccumulator/accumulator.cfg) ganharam `FileLogPath=fixlog`;
+[`compose.yaml`](../compose.yaml) monta um volume nomeado por serviço em `/app/fixlog`,
+sobrevivendo a `down`/`up` (diferente do `MemoryStoreFactory`, que reseta a exposição —
+comportamento inalterado e já documentado à parte).
+
+Achado no processo, não previsto na proposta original: `ScreenLogFactory(settings)` fica
+mudo por padrão — as flags `ScreenLogShowIncoming`/`ScreenLogShowOutgoing`/
+`ScreenLogShowEvents` só existem se o `.cfg` as declarar explicitamente (confirmado
+decompilando `QuickFix.dll` 1.14.1: sem elas, `IsBoolPresentAndTrue` devolve `false` e o
+`ScreenLog` nunca escreve). Adicionado `ScreenLogShowEvents=Y` a ambos os `.cfg` — cobre
+logon/logout/heartbeat no console, equivalente ao que o `ILoggerFactory` dava antes.
+Deliberadamente **sem** `ScreenLogShowIncoming`/`Outgoing`: o dump completo de cada
+mensagem (incluindo heartbeat a cada 30s) já vai para o `FileLogFactory`; duplicá-lo no
+console seria ruído sem ganho, já que o `docker compose logs` não é o lugar de auditoria.
+
+Verificado com Docker real (`docker compose up --build`): duas ordens via
+`curl http://localhost:5080/api/orders` (antes e depois de um ciclo
+`docker compose down && up`) aparecem como `35=D`/`35=8` em
+`/app/fixlog/FIX.4.4-ORDERACC-ORDERGEN.messages.current.log` dentro do container do
+Accumulator, as duas acumuladas no mesmo arquivo (volume nomeado persistindo); o console
+mostra `<event> Received logon`/`<event> Responding to logon request` junto dos logs de
+aplicação existentes, sem regressão de visibilidade operacional; `dotnet build` e
+`dotnet test` (45 testes) continuam passando.
+
 ---
 
 ## Fora de escopo consciente
@@ -510,8 +554,6 @@ esquecimento.
 - **Idempotência por `ClOrdID`.** Não há deduplicação: um resend FIX após reconexão seria
   contabilizado duas vezes na exposição. É consequência direta do item acima — resolver
   seqnum sem resolver idempotência resolve metade do problema.
-- **Log de mensagens FIX** (`FileLogFactory`). Trilha de auditoria de mensagens cruas é
-  requisito de compliance em ambiente real; hoje só existe o log de aplicação.
 - **Autenticação de sessão.** `ToAdmin`/`FromAdmin` estão vazios nos dois lados: nenhuma
   validação de credenciais no Logon (tags 553/554) e nenhuma whitelist de `CompID`. Qualquer
   processo que alcance a porta 5001 pode abrir sessão.
@@ -536,6 +578,7 @@ esquecimento.
 | 9 | `ProblemDetails` | Generator | P | ✅ feito — contrato de erro estável |
 | 10 | `OrdRejReason` (103) | Accumulator | P | ✅ feito — correção de protocolo FIX |
 | 11 | Higiene de build (2–5 da Infra) | Infra | P | ✅ feito — melhor em lote, depois do resto |
+| 12 | Log de mensagens FIX | Infra | P | ✅ feito — trilha de auditoria, ausente de "fora de escopo" |
 
 Os itens 1–3 são independentes e podem ir juntos. Os itens 4–7 formam uma corrente: o
 compose depende dos três anteriores.

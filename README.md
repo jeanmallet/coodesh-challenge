@@ -93,6 +93,27 @@ Abra **dois terminais** na raiz do repositório.
 > O gerador reconecta sozinho se o acumulador ainda não estiver no ar. O estado é em
 > memória: reiniciar o acumulador zera a exposição.
 
+## Logs
+
+Além do log de aplicação (console), os dois processos gravam a trilha bruta de
+mensagens FIX (Logon, `NewOrderSingle`, `ExecutionReport`, heartbeats) em
+`fixlog/<CompID>.messages.current.log`, e eventos de sessão (conexão, logon, logout)
+em `fixlog/<CompID>.event.current.log`. Via `docker compose`, cada serviço tem um
+volume nomeado montado em `/app/fixlog`, que sobrevive a `docker compose down`/`up`
+(diferente da exposição e das sessões FIX, que são em memória e resetam):
+
+```bash
+docker compose exec accumulator cat fixlog/FIX.4.4-ORDERACC-ORDERGEN.messages.current.log
+docker compose exec generator   cat fixlog/FIX.4.4-ORDERGEN-ORDERACC.messages.current.log
+```
+
+Via `dotnet run`, o diretório `fixlog/` fica local a cada projeto
+(`src/OrderAccumulator/fixlog`, `src/OrderGenerator/fixlog`).
+
+O console também mostra eventos de sessão (`<event> Received logon`, etc.) junto dos
+logs de aplicação; os dumps completos de mensagem (incluindo heartbeat a cada 30s) só
+vão para o arquivo, para não poluir `docker compose logs`.
+
 ## Testes
 
 ```bash

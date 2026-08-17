@@ -32,10 +32,14 @@ if (fixHost is not null || fixPort is not null)
     }
 }
 
-var loggerFactory = app.Services.GetRequiredService<ILoggerFactory>();
 var fixApp = app.Services.GetRequiredService<GeneratorApp>();
 var storeFactory = new MemoryStoreFactory();
-var initiator = new QuickFix.Transport.SocketInitiator(fixApp, storeFactory, settings, loggerFactory, new DefaultMessageFactory());
+// ScreenLogFactory cobre no console o que o ILoggerFactory dava (logon/logout/heartbeat);
+// FileLogFactory grava a trilha bruta de mensagens FIX em FileLogPath (generator.cfg).
+// Os logger.LogInformation da aplicação (GeneratorApp) continuam via ILogger, inalterados.
+QuickFix.Logger.ILogFactory logFactory = new QuickFix.Logger.CompositeLogFactory(
+    [new QuickFix.Logger.ScreenLogFactory(settings), new QuickFix.Logger.FileLogFactory(settings)]);
+var initiator = new QuickFix.Transport.SocketInitiator(fixApp, storeFactory, settings, logFactory, new DefaultMessageFactory());
 initiator.Start();
 app.Lifetime.ApplicationStopping.Register(() => initiator.Stop());
 

@@ -6,6 +6,9 @@ services:
       dockerfile: src/OrderAccumulator/Dockerfile
     # HEALTHCHECK definido no Dockerfile (sonda a porta FIX 5001) — usado pelo
     # depends_on abaixo para não deixar o generator conectar cedo demais.
+    volumes:
+      # Trilha de mensagens FIX (FileLogPath=fixlog no .cfg) — sobrevive a down/up.
+      - accumulator-fix-logs:/app/fixlog
 
   generator:
     container_name: order_generator
@@ -20,3 +23,9 @@ services:
     depends_on:
       accumulator:
         condition: service_healthy
+    volumes:
+      - generator-fix-logs:/app/fixlog
+
+volumes:
+  accumulator-fix-logs:
+  generator-fix-logs:

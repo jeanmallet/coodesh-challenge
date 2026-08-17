@@ -43,6 +43,8 @@ msbuild.log
 msbuild.err
 msbuild.wrn
 
+fixlog/
+
 # Node.js build artifacts
 node_modules/
 package-lock.json

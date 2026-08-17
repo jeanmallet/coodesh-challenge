@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using QuickFix;
+using QuickFix.Logger;
 using QuickFix.Store;
 
 namespace OrderAccumulator;
@@ -11,15 +12,19 @@ namespace OrderAccumulator;
 /// </summary>
 public sealed class AccumulatorHostedService(
     AccumulatorApp app,
-    ILoggerFactory loggerFactory,
     ILogger<AccumulatorHostedService> logger) : IHostedService, IDisposable
 {
-    private readonly ThreadedSocketAcceptor _acceptor = new(
-        app,
-        new MemoryStoreFactory(),
-        new SessionSettings(Path.Combine(AppContext.BaseDirectory, "accumulator.cfg")),
-        loggerFactory,
-        new DefaultMessageFactory());
+    private readonly ThreadedSocketAcceptor _acceptor = CreateAcceptor(app);
+
+    // ScreenLogFactory cobre no console o que o ILoggerFactory dava (logon/logout/heartbeat);
+    // FileLogFactory grava a trilha bruta de mensagens FIX em FileLogPath (accumulator.cfg).
+    // Os logger.LogInformation da aplicação (AccumulatorApp) continuam via ILogger, inalterados.
+    private static ThreadedSocketAcceptor CreateAcceptor(AccumulatorApp app)
+    {
+        var settings = new SessionSettings(Path.Combine(AppContext.BaseDirectory, "accumulator.cfg"));
+        var logFactory = new CompositeLogFactory([new ScreenLogFactory(settings), new FileLogFactory(settings)]);
+        return new ThreadedSocketAcceptor(app, new MemoryStoreFactory(), settings, logFactory, new DefaultMessageFactory());
+    }
 
     public Task StartAsync(CancellationToken cancellationToken)
     {

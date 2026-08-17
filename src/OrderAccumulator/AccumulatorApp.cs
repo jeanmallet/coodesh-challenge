@@ -31,10 +31,10 @@ public class AccumulatorApp(ILogger<AccumulatorApp> logger) : MessageCracker, IA
             logger.LogInformation("NewOrderSingle {ClOrdId} {Symbol} side={Side} qty={Quantity} px={Price}",
                 clOrdId, fields.Symbol, fields.Side, fields.Quantity, fields.Price);
 
-            var error = OrderRules.Validate(fields);
-            if (error is not null)
+            var violation = OrderRules.Validate(fields);
+            if (violation is not null)
             {
-                Send(sessionID, clOrdId, fields, accepted: false, text: error);
+                Send(sessionID, clOrdId, fields, accepted: false, text: violation.Text, ordRejReason: violation.OrdRejReason);
                 return;
             }
 
@@ -47,21 +47,22 @@ public class AccumulatorApp(ILogger<AccumulatorApp> logger) : MessageCracker, IA
             var text = result.Accepted
                 ? $"Aceita. Exposicao resultante {result.ResultingExposure:N2} para {fields.Symbol}"
                 : result.RejectReason!;
+            var ordRejReason = result.Accepted ? (int?)null : OrderRules.OrdRejReasonExceedsLimit;
 
-            Send(sessionID, clOrdId, fields, accepted: result.Accepted, text: text);
+            Send(sessionID, clOrdId, fields, accepted: result.Accepted, text: text, ordRejReason: ordRejReason);
         }
         catch (Exception ex)
         {
             // Falha inesperada no processamento de uma ordem não pode derrubar a sessão FIX
             logger.LogError(ex, "Erro inesperado processando NewOrderSingle {ClOrdId}", clOrdId);
             Send(sessionID, clOrdId, new OrderFields("", '\0', 0m, 0m), accepted: false,
-                text: "Erro interno ao processar a ordem");
+                text: "Erro interno ao processar a ordem", ordRejReason: OrderRules.OrdRejReasonOther);
         }
     }
 
-    private void Send(SessionID sessionID, string clOrdId, OrderFields fields, bool accepted, string text)
+    private void Send(SessionID sessionID, string clOrdId, OrderFields fields, bool accepted, string text, int? ordRejReason = null)
     {
-        var message = BuildFIXMessage(clOrdId, fields, accepted, text);
+        var message = BuildFIXMessage(clOrdId, fields, accepted, text, ordRejReason);
 
         try
         {
@@ -88,7 +89,7 @@ public class AccumulatorApp(ILogger<AccumulatorApp> logger) : MessageCracker, IA
         Quantity: order.IsSetOrderQty() ? order.OrderQty.Value : 0m,
         Price: order.IsSetPrice() ? order.Price.Value : 0m);
 
-    private QuickFix.FIX44.ExecutionReport BuildFIXMessage(string clOrdId, OrderFields fields, bool accepted, string text)
+    private QuickFix.FIX44.ExecutionReport BuildFIXMessage(string clOrdId, OrderFields fields, bool accepted, string text, int? ordRejReason)
     {
         // Campos exigidos pelo dicionário FIX44 precisam de valores válidos mesmo na
         // rejeição por formato: usa fallbacks (símbolo/lado) só para o report ser bem-formado.
@@ -117,6 +118,9 @@ public class AccumulatorApp(ILogger<AccumulatorApp> logger) : MessageCracker, IA
             report.Set(new LastPx(fields.Price));
             report.Set(new Price(fields.Price));
         }
+
+        if (!accepted && ordRejReason.HasValue)
+            report.Set(new OrdRejReason(ordRejReason.Value));
 
         report.Set(new Text(text));
 

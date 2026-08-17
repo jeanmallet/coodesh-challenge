@@ -279,7 +279,7 @@ o corpo de `OnMessage` está em try/catch, e qualquer exceção não prevista lo
 acoplado ao `MessageCracker`/`Session` do QuickFIX, a mesma limitação de testabilidade do
 item 6 abaixo — extrair a lógica de decisão resolveria os dois de uma vez.
 
-### 3. Rejeição sem `OrdRejReason` (tag 103)
+### 3. Rejeição sem `OrdRejReason` (tag 103) — ✅ resolvido
 
 **Hoje**: o motivo da rejeição vai só em `Text` (58), como texto livre em português.
 
@@ -292,7 +292,17 @@ para `UNKNOWN_SYMBOL`/`INCORRECT_QUANTITY` e a de limite para `ORDER_EXCEEDS_LIM
 que é exatamente o caso desta regra de negócio. `OrderRules.Validate` passa a devolver um
 resultado com motivo + código em vez de `string?`.
 
-**Esforço**: P.
+**Esforço**: P. Feito: `OrderRules.Validate` devolve `RuleViolation?` (código + texto) em
+vez de `string?`. Os códigos são constantes `int` locais em `OrderRules` (mesmo espírito
+de `SideBuy`/`SideSell` já existentes) — não uma referência a `QuickFix.Fields.OrdRejReason`,
+para manter a pureza que o comentário da classe já reivindicava. Símbolo inválido →
+`UNKNOWN_SYMBOL` (1); quantidade inválida (não-inteira ou fora da faixa) →
+`INCORRECT_QUANTITY` (13); lado/preço inválidos → `OTHER` (99), por não haver código mais
+específico no dicionário FIX44; exposição excedida (em `AccumulatorApp`, fora de
+`OrderRules`) → `ORDER_EXCEEDS_LIMIT` (3); erro interno inesperado (item 2 acima) →
+`OTHER` (99). Verificado no wire: subindo os dois processos e forçando uma rejeição por
+limite (duas ordens grandes em sequência), o `ExecutionReport` capturado no log traz
+`103=3` antes da tag `58` (`Text`), na mensagem exata que rejeitou a segunda ordem.
 
 ### 4. Exposição acumulada não é observável
 
@@ -494,7 +504,7 @@ esquecimento.
 | 7 | `docker-compose` | Infra | M | ✅ feito — maior ganho de operabilidade |
 | 8 | `innerHTML` + duplo submit | Generator | P | ✅ feito — baratos e visíveis na avaliação |
 | 9 | `ProblemDetails` | Generator | P | ✅ feito — contrato de erro estável |
-| 10 | `OrdRejReason` (103) | Accumulator | P | Correção de protocolo FIX |
+| 10 | `OrdRejReason` (103) | Accumulator | P | ✅ feito — correção de protocolo FIX |
 | 11 | Higiene de build (2–5 da Infra) | Infra | P | Melhor em lote, depois do resto |
 
 Os itens 1–3 são independentes e podem ir juntos. Os itens 4–7 formam uma corrente: o

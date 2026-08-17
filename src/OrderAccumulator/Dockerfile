@@ -12,10 +12,12 @@ FROM mcr.microsoft.com/dotnet/runtime:10.0 AS final
 WORKDIR /app
 COPY --from=build /app .
 
-# Acceptor TCP puro, sem HTTP: sonda a porta FIX diretamente (recurso do bash, já presente
-# na imagem base Debian, sem instalar netcat/curl só para isso).
+# Acceptor TCP puro, sem HTTP: não dá para sondar com uma conexão real (ex.: /dev/tcp) —
+# o acceptor QuickFIX trata qualquer conexão que não manda um Logon válido como sessão
+# malformada e loga "Broken pipe" a cada probe. Em vez disso lê /proc/net/tcp (procfs,
+# sem abrir socket nenhum) e confere se a porta 5001 (hex 1389) está em LISTEN.
 HEALTHCHECK --interval=5s --timeout=3s --start-period=5s --retries=5 \
-    CMD ["bash", "-c", "echo > /dev/tcp/127.0.0.1/5001"]
+    CMD ["bash", "-c", "grep -q ':1389 ' /proc/net/tcp"]
 
 EXPOSE 5001
 ENTRYPOINT ["dotnet", "OrderAccumulator.dll"]

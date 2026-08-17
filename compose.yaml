@@ -1,5 +1,6 @@
 services:
   accumulator:
+    container_name: order_accumulator
     build:
       context: .
       dockerfile: src/OrderAccumulator/Dockerfile
@@ -7,6 +8,7 @@ services:
     # depends_on abaixo para não deixar o generator conectar cedo demais.
 
   generator:
+    container_name: order_generator
     build:
       context: .
       dockerfile: src/OrderGenerator/Dockerfile

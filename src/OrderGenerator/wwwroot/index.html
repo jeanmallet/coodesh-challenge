@@ -52,6 +52,7 @@
   <script>
     const form = document.getElementById('order-form');
     const box = document.getElementById('result');
+    const submitButton = form.querySelector('button[type="submit"]');
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -63,49 +64,69 @@
         price: Number(fd.get('price')),
       };
 
+      submitButton.disabled = true;
       box.style.display = 'block';
       box.className = '';
       box.textContent = 'Enviando…';
 
-      let res, data;
       try {
-        res = await fetch('/api/orders', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-        data = await res.json();
-      } catch (err) {
-        box.className = 'error';
-        box.textContent = 'Falha de rede: ' + err;
-        return;
-      }
+        let res, data;
+        try {
+          res = await fetch('/api/orders', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          data = await res.json();
+        } catch (err) {
+          box.className = 'error';
+          box.textContent = 'Falha de rede: ' + err;
+          return;
+        }
 
-      if (!res.ok) {
-        box.className = 'error';
-        box.innerHTML = '<span class="status">Erro</span>' +
-          '<div>' + (data.error ?? ('HTTP ' + res.status)) + '</div>';
-        return;
-      }
+        if (!res.ok) {
+          box.className = 'error';
+          renderError(data.error ?? ('HTTP ' + res.status));
+          return;
+        }
 
-      const accepted = data.accepted;
-      box.className = accepted ? 'ok' : 'reject';
-      box.innerHTML =
-        '<span class="status">' + (accepted ? '✔ ACEITA' : '✖ REJEITADA') +
-        ' — ExecType=' + data.execType + '</span>' +
-        '<dl>' +
-        row('Símbolo', data.symbol) +
-        row('Lado', data.side) +
-        row('Quantidade', data.quantity) +
-        row('Preço', data.price) +
-        row('OrdStatus', data.ordStatus) +
-        row('ClOrdID', data.clOrdId) +
-        row('Text', data.text) +
-        '</dl>';
+        renderResult(data);
+      } finally {
+        submitButton.disabled = false;
+      }
     });
 
+    function renderError(message) {
+      box.replaceChildren(el('span', 'status', 'Erro'), el('div', null, message));
+    }
+
+    function renderResult(data) {
+      box.className = data.accepted ? 'ok' : 'reject';
+      const dl = document.createElement('dl');
+      dl.append(
+        ...row('Símbolo', data.symbol),
+        ...row('Lado', data.side),
+        ...row('Quantidade', data.quantity),
+        ...row('Preço', data.price),
+        ...row('OrdStatus', data.ordStatus),
+        ...row('ClOrdID', data.clOrdId),
+        ...row('Text', data.text),
+      );
+      box.replaceChildren(
+        el('span', 'status', (data.accepted ? '✔ ACEITA' : '✖ REJEITADA') + ' — ExecType=' + data.execType),
+        dl,
+      );
+    }
+
     function row(k, v) {
-      return '<dt>' + k + '</dt><dd>' + (v ?? '') + '</dd>';
+      return [el('dt', null, k), el('dd', null, v ?? '')];
+    }
+
+    function el(tag, className, text) {
+      const node = document.createElement(tag);
+      if (className) node.className = className;
+      if (text !== undefined) node.textContent = text;
+      return node;
     }
   </script>
 </body>

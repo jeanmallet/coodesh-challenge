@@ -174,7 +174,7 @@ acima, mas só o necessário para o health check resolver a dependência; o init
 continua com start/stop manual. Verificado em runtime: `/health` responde 503 antes do
 logon e 200 assim que a sessão com o Accumulator abre.
 
-### 9. Frontend — `innerHTML` com dados de resposta
+### 9. Frontend — `innerHTML` com dados de resposta — ✅ resolvido
 
 **Hoje**: [`index.html:93`](../src/OrderGenerator/wwwroot/index.html) monta o resultado por
 concatenação de string, injetando `data.text`, `data.symbol` e os demais campos sem escape.
@@ -187,9 +187,14 @@ sem aviso. `data.text` é texto livre vindo pela tag 58 de outro processo.
 **Proposta**: construir os nós com `document.createElement` + `textContent` na função `row`.
 Diff pequeno, remove a classe inteira de problema.
 
-**Esforço**: P.
+**Esforço**: P. Feito em [`index.html`](../src/OrderGenerator/wwwroot/index.html):
+`renderError`/`renderResult` montam os nós via `document.createElement` + `textContent`
+(helper `el()`), sem nenhum `innerHTML` restante. Verificado no browser real: chamando as
+duas funções diretamente com payload malicioso (`<img src=x onerror=alert(1)>` e
+`<script>alert(2)</script>`), o HTML resultante mostra os valores escapados
+(`&lt;img...&gt;`) e nenhum `alert` dispara.
 
-### 10. Frontend — duplo submit
+### 10. Frontend — duplo submit — ✅ resolvido
 
 **Hoje**: o botão não é desabilitado durante o envio.
 
@@ -199,7 +204,10 @@ exposição do sistema e a intenção do usuário.
 
 **Proposta**: `button.disabled = true` no início do handler, restaurado no `finally`.
 
-**Esforço**: P.
+**Esforço**: P. Feito: `submitButton.disabled = true` logo no início do handler,
+restaurado num `finally` que envolve toda a chamada. Verificado no browser real: disparar
+o clique via JS e checar `disabled` imediatamente depois, antes da resposta chegar,
+confirma `true`.
 
 ### 11. Sem correlação em log
 
@@ -475,7 +483,7 @@ esquecimento.
 | 5 | Config externalizada | Generator | M | ✅ feito — destrava o container |
 | 6 | Health check | Generator | P | ✅ feito — destrava `depends_on: service_healthy` |
 | 7 | `docker-compose` | Infra | M | ✅ feito — maior ganho de operabilidade |
-| 8 | `innerHTML` + duplo submit | Generator | P | Baratos e visíveis na avaliação |
+| 8 | `innerHTML` + duplo submit | Generator | P | ✅ feito — baratos e visíveis na avaliação |
 | 9 | `ProblemDetails` | Generator | P | Contrato de erro estável |
 | 10 | `OrdRejReason` (103) | Accumulator | P | Correção de protocolo FIX |
 | 11 | Higiene de build (2–5 da Infra) | Infra | P | Melhor em lote, depois do resto |

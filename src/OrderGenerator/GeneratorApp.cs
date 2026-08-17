@@ -20,6 +20,9 @@ public class GeneratorApp(ILogger<GeneratorApp> logger) : MessageCracker, IAppli
     private readonly ConcurrentDictionary<string, TaskCompletionSource<OrderResult>> _pending = new();
     private volatile SessionID? _sessionId;
 
+    /// <summary>True enquanto a sessão FIX com o OrderAccumulator está logada. Base do health check.</summary>
+    public bool IsSessionActive => _sessionId is not null;
+
     public void OnCreate(SessionID sessionID) { }
     public void OnLogon(SessionID sessionID) { _sessionId = sessionID; logger.LogInformation("Logon: {SessionID}", sessionID); }
     public void OnLogout(SessionID sessionID) { _sessionId = null; logger.LogInformation("Logout: {SessionID}", sessionID); }

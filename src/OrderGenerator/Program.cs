@@ -3,6 +3,8 @@ using QuickFix.Store;
 using OrderGenerator;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddSingleton<GeneratorApp>();
+builder.Services.AddHealthChecks().AddCheck<FixSessionHealthCheck>("fix-session");
 var app = builder.Build();
 
 // Initiator FIX 4.4 embutido no processo web.
@@ -23,7 +25,7 @@ if (fixHost is not null || fixPort is not null)
 }
 
 var loggerFactory = app.Services.GetRequiredService<ILoggerFactory>();
-var fixApp = new GeneratorApp(loggerFactory.CreateLogger<GeneratorApp>());
+var fixApp = app.Services.GetRequiredService<GeneratorApp>();
 var storeFactory = new MemoryStoreFactory();
 var initiator = new QuickFix.Transport.SocketInitiator(fixApp, storeFactory, settings, loggerFactory, new DefaultMessageFactory());
 initiator.Start();
@@ -31,6 +33,7 @@ app.Lifetime.ApplicationStopping.Register(() => initiator.Stop());
 
 app.UseDefaultFiles();
 app.UseStaticFiles();
+app.MapHealthChecks("/health");
 
 var orderTimeout = TimeSpan.FromSeconds(app.Configuration.GetValue("OrderGenerator:OrderTimeoutSeconds", 5));
 

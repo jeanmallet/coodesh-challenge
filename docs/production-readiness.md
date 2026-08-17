@@ -150,7 +150,7 @@ regras), tornando o contrato do binder explícito.
 
 **Esforço**: P.
 
-### 8. Sem health check
+### 8. Sem health check — ✅ resolvido
 
 **Hoje**: nada expõe se a sessão FIX está logada. Descobrir exige mandar uma ordem e ver
 o 503.
@@ -162,7 +162,13 @@ no compose.
 **Proposta**: `AddHealthChecks()` com um check derivado de `_sessionId` do `GeneratorApp`,
 exposto em `/health`.
 
-**Esforço**: P.
+**Esforço**: P. Feito: `GeneratorApp.IsSessionActive` expõe `_sessionId is not null`;
+[`FixSessionHealthCheck`](../src/OrderGenerator/FixSessionHealthCheck.cs) implementa
+`IHealthCheck` sobre ela e é mapeado em `/health`. Para isso `GeneratorApp` passou a ser
+resolvido via DI (`AddSingleton`) em vez de `new`-ado à mão — um primeiro passo do item 3
+acima, mas só o necessário para o health check resolver a dependência; o initiator FIX
+continua com start/stop manual. Verificado em runtime: `/health` responde 503 antes do
+logon e 200 assim que a sessão com o Accumulator abre.
 
 ### 9. Frontend — `innerHTML` com dados de resposta
 
@@ -426,7 +432,7 @@ esquecimento.
 | 3 | try/catch em `OnMessage` | Accumulator | P | ✅ feito — uma ordem ruim não pode custar a sessão |
 | 4 | Generic Host + `IHostedService` | Accumulator | M | ✅ feito — shutdown em `SIGTERM`; base do compose |
 | 5 | Config externalizada | Generator | M | ✅ feito — destrava o container |
-| 6 | Health check | Generator | P | Destrava `depends_on: service_healthy` |
+| 6 | Health check | Generator | P | ✅ feito — destrava `depends_on: service_healthy` |
 | 7 | `docker-compose` | Infra | M | Maior ganho de operabilidade |
 | 8 | `innerHTML` + duplo submit | Generator | P | Baratos e visíveis na avaliação |
 | 9 | `ProblemDetails` | Generator | P | Contrato de erro estável |

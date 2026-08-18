@@ -1,4 +1,4 @@
-namespace OrderAccumulator;
+namespace OrderAccumulator.Domain;
 
 /// <summary>
 /// Motivo de uma rejeição: texto livre (tag 58) + código roteável (tag 103, OrdRejReason).

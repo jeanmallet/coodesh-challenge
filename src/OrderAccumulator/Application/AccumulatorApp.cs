@@ -1,8 +1,9 @@
 using Microsoft.Extensions.Logging;
 using QuickFix;
 using QuickFix.Fields;
+using OrderAccumulator.Domain;
 
-namespace OrderAccumulator;
+namespace OrderAccumulator.Application;
 
 /// <summary>
 /// Acceptor FIX 4.4. Recebe NewOrderSingle, revalida todas as regras (autoritativo),

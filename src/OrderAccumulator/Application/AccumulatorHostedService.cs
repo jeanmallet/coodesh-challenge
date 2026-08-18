@@ -4,7 +4,7 @@ using QuickFix;
 using QuickFix.Logger;
 using QuickFix.Store;
 
-namespace OrderAccumulator;
+namespace OrderAccumulator.Application;
 
 /// <summary>
 /// Hospeda o ciclo de vida do acceptor FIX 4.4 no Generic Host: inicia em StartAsync

@@ -1,7 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using OrderAccumulator;
+using OrderAccumulator.Application;
 
 // Config referencia FIX44.xml por caminho relativo; ancora o cwd no dir do binário.
 Directory.SetCurrentDirectory(AppContext.BaseDirectory);

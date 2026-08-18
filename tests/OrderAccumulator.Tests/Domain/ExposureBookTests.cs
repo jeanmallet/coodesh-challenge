@@ -1,4 +1,4 @@
-using OrderAccumulator;
+using OrderAccumulator.Domain;
 using Xunit;
 
 namespace OrderAccumulator.Tests;

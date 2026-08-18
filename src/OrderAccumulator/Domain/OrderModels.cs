@@ -1,4 +1,4 @@
-namespace OrderAccumulator;
+namespace OrderAccumulator.Domain;
 
 /// <summary>
 /// Lado da ordem, para efeito de cálculo de exposição financeira.

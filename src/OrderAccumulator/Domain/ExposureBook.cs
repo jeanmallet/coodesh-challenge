@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
 
-namespace OrderAccumulator;
+namespace OrderAccumulator.Domain;
 
 public sealed record EvaluationResult(bool Accepted, decimal ResultingExposure, string? RejectReason)
 {

@@ -1,0 +1,19 @@
+<Project>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <AnalysisMode>Recommended</AnalysisMode>
+    <!--
+      CA1848/CA1873: pedem LoggerMessage source-gerado em vez de ILogger.LogX direto.
+      Certo para logging em hot path de alto throughput; desproporcional aqui — poucas
+      chamadas por ordem processada. Reescrever tudo para o padrão fonte-gerado é um
+      refactor maior do que "higiene de build" propõe.
+    -->
+    <NoWarn>$(NoWarn);CA1848;CA1873</NoWarn>
+  </PropertyGroup>
+
+</Project>

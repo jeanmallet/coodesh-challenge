@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OrderGenerator — Nova Ordem (FIX 4.4)</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --buy: #2e7d32; --buy-bg: #e8f5e9; --buy-text: #1b5e20;
+      --sell: #c62828; --sell-bg: #fdecea; --sell-text: #7f1d1d;
+      --bg: #f3f4f6; --surface: #ffffff; --border: #e2e2e2;
+      --text: #1f2328; --muted: #6b7280;
+      --danger-bg: #fdecea; --danger-text: #7f1d1d; --danger-border: #c62828;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        color-scheme: dark;
+        --bg: #16181c; --surface: #1c1e22; --border: #33363b;
+        --text: #f1f3f4; --muted: #9aa0a6;
+        --buy-bg: #123320; --buy-text: #7fdc94;
+        --sell-bg: #3a1414; --sell-text: #f28b8b;
+        --danger-bg: #3a1414; --danger-text: #f28b8b; --danger-border: #c62828;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, sans-serif; color: var(--text); background: var(--bg);
+      margin: 0; padding: 2.5rem 1rem; display: flex; justify-content: center;
+    }
+    .ticket {
+      width: 100%; max-width: 380px; background: var(--surface);
+      border: 1px solid var(--border); border-radius: 14px; overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+    }
+    .accent { height: 4px; background: var(--muted); transition: background 0.15s; }
+    .ticket.online .accent { background: var(--buy); }
+    .ticket.offline .accent { background: var(--sell); }
+    .head { padding: 1.25rem 1.5rem 0.5rem; display: flex; align-items: flex-start; justify-content: space-between; gap: 0.75rem; }
+    .head h1 { margin: 0; font-size: 1.05rem; font-weight: 700; }
+    .head p { margin: 0.2rem 0 0; font-size: 0.75rem; color: var(--muted); font-family: var(--mono); }
+    .conn {
+      display: inline-flex; align-items: center; gap: 0.35rem; margin-top: 0.15rem;
+      font-size: 0.7rem; font-weight: 600; color: var(--muted); white-space: nowrap;
+    }
+    .conn::before {
+      content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--muted);
+    }
+    .conn.online { color: var(--buy-text); }
+    .conn.online::before { background: var(--buy); }
+    .conn.offline { color: var(--sell-text); }
+    .conn.offline::before { background: var(--sell); }
+    form { padding: 0.5rem 1.5rem 1.5rem; display: grid; gap: 1rem; }
+    .field label { display: block; font-size: 0.75rem; font-weight: 600; color: var(--muted); margin-bottom: 0.35rem; }
+    select {
+      width: 100%; padding: 0.55rem 0.65rem; border-radius: 8px; border: 1px solid var(--border);
+      background: transparent; color: var(--text); font-size: 0.95rem; font-family: inherit;
+    }
+    select option {
+      background-color: var(--surface); color: var(--text);
+    }
+    .toggle { display: flex; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); }
+    .toggle input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+    .toggle label {
+      flex: 1; text-align: center; padding: 0.55rem 0; font-size: 0.85rem; font-weight: 600;
+      cursor: pointer; margin: 0; color: var(--text); user-select: none;
+    }
+    .toggle input:checked + label { background: var(--text); color: var(--surface); }
+    .toggle input:focus-visible + label { outline: 2px solid var(--muted); outline-offset: -2px; }
+    .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    .num { position: relative; }
+    .num input {
+      width: 100%; padding: 0.55rem 0.65rem; border-radius: 8px; border: 1px solid var(--border);
+      background: transparent; color: var(--text); font-family: var(--mono); font-size: 0.95rem;
+    }
+    .num.price input { padding-left: 1.7rem; }
+    .num.qty input { padding-right: 2.1rem; }
+    .num .prefix, .num .suffix {
+      position: absolute; top: 50%; transform: translateY(-50%); font-size: 0.8rem;
+      color: var(--muted); font-family: var(--mono); pointer-events: none;
+    }
+    .num .prefix { left: 0.6rem; }
+    .num .suffix { right: 0.6rem; }
+    .hint { margin: 0.3rem 0 0; font-size: 0.7rem; color: var(--muted); }
+    .notice {
+      margin: -0.25rem 0 0; padding: 0.7rem 0.9rem; border-radius: 8px;
+      border: 1px solid var(--danger-border); background: var(--danger-bg);
+      color: var(--danger-text); font-size: 0.8rem; display: none;
+    }
+    #validation ul { margin: 0; padding-left: 1.1rem; }
+    button[type="submit"] {
+      padding: 0.7rem; border: none; border-radius: 8px; font-weight: 700; font-size: 0.95rem;
+      color: #fff; background: var(--muted); cursor: pointer; transition: background 0.15s;
+    }
+    .ticket.online button[type="submit"] { background: var(--buy); }
+    .ticket.offline button[type="submit"] { background: var(--sell); }
+    button[type="submit"]:disabled { opacity: 0.6; cursor: default; }
+    #result {
+      margin: 0 1.5rem 1.5rem; padding: 1rem 1.1rem; border-radius: 10px;
+      border: 1px solid var(--border); background: var(--bg); display: none;
+    }
+    #result.ok { border-color: var(--buy); background: var(--buy-bg); }
+    #result.reject { border-color: #b8860b; background: #b8860b18; }
+    #result.error { border-color: var(--sell); background: var(--sell-bg); }
+    .status {
+      display: inline-block; font-weight: 700; font-size: 0.75rem; letter-spacing: 0.02em;
+      padding: 0.25rem 0.65rem; border-radius: 999px; background: rgba(0, 0, 0, 0.06); margin-bottom: 0.6rem;
+    }
+    dl { display: grid; grid-template-columns: auto 1fr; gap: 0.25rem 0.75rem; margin: 0; }
+    dt { font-size: 0.8rem; color: var(--muted); }
+    dd { margin: 0; font-family: var(--mono); font-weight: 600; text-align: left; word-break: break-word; }
+  </style>
+</head>
+<body>
+  <div class="ticket" id="ticket">
+    <div class="accent"></div>
+    <div class="head">
+      <div>
+        <h1>Nova ordem</h1>
+        <p>FIX 4.4 · OrderGenerator</p>
+      </div>
+      <span id="conn-status" class="conn checking">Verificando…</span>
+    </div>
+    <form id="order-form" novalidate>
+      <div class="field">
+        <label>Símbolo</label>
+        <select name="symbol" required>
+          <option value="PETR4">PETR4</option>
+          <option value="VALE3">VALE3</option>
+          <option value="VIIA4">VIIA4</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Lado</label>
+        <div class="toggle">
+          <input type="radio" id="side-compra" name="side" value="Compra" checked />
+          <label for="side-compra">Compra</label>
+          <input type="radio" id="side-venda" name="side" value="Venda" />
+          <label for="side-venda">Venda</label>
+        </div>
+      </div>
+      <div class="row2">
+        <div class="field num qty">
+          <label>Quantidade</label>
+          <input name="quantity" type="number" min="1" max="99999" step="1" required />
+          <span class="suffix">un.</span>
+          <p class="hint">Máx. 99.999 un.</p>
+        </div>
+        <div class="field num price">
+          <label>Preço</label>
+          <span class="prefix">R$</span>
+          <input name="price" type="number" min="0.01" max="999.99" step="0.01" required />
+          <p class="hint">Máx. R$ 999,99</p>
+        </div>
+      </div>
+      <div id="offline-notice" class="notice">O sistema de ordens de negociação está offline. Aguarde ficar online para enviar uma nova ordem.</div>
+      <button type="submit" disabled>Enviar ordem</button>
+      <div id="validation" class="notice"></div>
+    </form>
+
+    <div id="result"></div>
+  </div>
+
+  <script>
+    const form = document.getElementById('order-form');
+    const box = document.getElementById('result');
+    const validationBox = document.getElementById('validation');
+    const submitButton = form.querySelector('button[type="submit"]');
+    const connStatus = document.getElementById('conn-status');
+    const ticket = document.getElementById('ticket');
+    const offlineNotice = document.getElementById('offline-notice');
+
+    let isOnline = false;
+    let isSubmitting = false;
+    let wasOnline = false;
+
+    function updateSubmitState() {
+      submitButton.disabled = !isOnline || isSubmitting;
+    }
+
+    async function checkHealth() {
+      try {
+        const res = await fetch('/health', { cache: 'no-store' });
+        isOnline = res.ok;
+      } catch {
+        isOnline = false;
+      }
+      connStatus.className = 'conn ' + (isOnline ? 'online' : 'offline');
+      connStatus.textContent = isOnline ? 'Online' : 'Offline';
+      ticket.className = 'ticket ' + (isOnline ? 'online' : 'offline');
+      offlineNotice.style.display = isOnline ? 'none' : 'block';
+      if (!isOnline && wasOnline !== isOnline) {
+        // Fica offline: some com qualquer validação/resultado da requisição anterior,
+        // só a mensagem de offline acima do botão permanece visível.
+        validationBox.style.display = 'none';
+        validationBox.replaceChildren();
+        box.style.display = 'none';
+        box.replaceChildren();
+      }
+      wasOnline = isOnline;
+      updateSubmitState();
+    }
+
+    checkHealth();
+    setInterval(checkHealth, 5000);
+
+    function validate(payload) {
+      const errors = [];
+      if (!Number.isInteger(payload.quantity) || payload.quantity < 1 || payload.quantity > 99999) {
+        errors.push('Quantidade deve ser um número inteiro entre 1 e ' + (99999).toLocaleString('pt-BR') + ' un.');
+      }
+      if (!Number.isFinite(payload.price) || payload.price < 0.01 || payload.price > 999.99) {
+        errors.push('Preço deve estar entre R$ 0,01 e R$ ' + (999.99).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) + '.');
+      }
+      return errors;
+    }
+
+    function renderValidation(errors) {
+      if (errors.length === 0) {
+        validationBox.style.display = 'none';
+        validationBox.replaceChildren();
+        return;
+      }
+      const list = document.createElement('ul');
+      list.append(...errors.map((msg) => el('li', null, msg)));
+      validationBox.replaceChildren(list);
+      validationBox.style.display = 'block';
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const fd = new FormData(form);
+      const payload = {
+        symbol: fd.get('symbol'),
+        side: fd.get('side'),
+        quantity: Number(fd.get('quantity')),
+        price: Number(fd.get('price')),
+      };
+
+      const errors = validate(payload);
+      renderValidation(errors);
+      if (errors.length > 0) return;
+
+      isSubmitting = true;
+      updateSubmitState();
+      box.style.display = 'block';
+      box.className = '';
+      box.textContent = 'Enviando…';
+
+      try {
+        let res, data;
+        try {
+          res = await fetch('/api/orders', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          data = await res.json();
+        } catch (err) {
+          box.className = 'error';
+          box.textContent = 'Falha de rede: OrderGenerator App pode estar offline.' + err;
+          return;
+        }
+
+        if (!res.ok) {
+          box.className = 'error';
+          // Resposta segue RFC 7807 (ProblemDetails): title + detail, não mais { error }.
+          renderError((data.title ? data.title + ': ' : '') + (data.detail ?? ('HTTP ' + res.status)));
+          return;
+        }
+
+        renderResult(data);
+      } finally {
+        isSubmitting = false;
+        updateSubmitState();
+      }
+    });
+
+    function renderError(message) {
+      box.replaceChildren(el('span', 'status', 'Erro'), el('div', null, message));
+    }
+
+    function renderResult(data) {
+      box.className = data.accepted ? 'ok' : 'reject';
+      const dl = document.createElement('dl');
+      dl.append(
+        ...row('Símbolo', data.symbol),
+        ...row('Lado', data.side),
+        ...row('Quantidade', data.quantity),
+        ...row('Preço', data.price),
+        ...row('OrdStatus', data.ordStatus),
+        ...row('ClOrdID', data.clOrdId),
+        ...row('Text', data.text),
+      );
+      box.replaceChildren(
+        el('span', 'status', (data.accepted ? '✔ ACEITA' : '✖ REJEITADA') + ' — ExecType=' + data.execType),
+        dl,
+      );
+    }
+
+    function row(k, v) {
+      return [el('dt', null, k), el('dd', null, v ?? '')];
+    }
+
+    function el(tag, className, text) {
+      const node = document.createElement(tag);
+      if (className) node.className = className;
+      if (text !== undefined) node.textContent = text;
+      return node;
+    }
+  </script>
+</body>
+</html>

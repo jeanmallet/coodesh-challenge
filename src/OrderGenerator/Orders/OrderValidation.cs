@@ -1,4 +1,4 @@
-namespace OrderGenerator;
+namespace OrderGenerator.Orders;
 
 /// <summary>Ordem vinda do formulário web (Lado em português, quantidade inteira).</summary>
 public record NewOrderRequest(string Symbol, string Side, int Quantity, decimal Price);

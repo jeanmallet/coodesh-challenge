@@ -4,9 +4,10 @@ using Microsoft.AspNetCore.RateLimiting;
 using QuickFix;
 using QuickFix.Store;
 using OrderGenerator;
+using OrderGenerator.Orders;
 
 var builder = WebApplication.CreateBuilder(args);
-builder.Services.AddSingleton<GeneratorApp>();
+builder.Services.AddSingleton<OrderGeneratorApp>();
 builder.Services.AddHealthChecks().AddCheck<FixSessionHealthCheck>("fix-session");
 builder.Services.AddProblemDetails();
 
@@ -63,13 +64,14 @@ if (fixHost is not null || fixPort is not null)
     }
 }
 
-var fixApp = app.Services.GetRequiredService<GeneratorApp>();
+var fixApp = app.Services.GetRequiredService<OrderGeneratorApp>();
 var storeFactory = new MemoryStoreFactory();
 // ScreenLogFactory cobre no console o que o ILoggerFactory dava (logon/logout/heartbeat);
 // FileLogFactory grava a trilha bruta de mensagens FIX em FileLogPath (generator.cfg).
-// Os logger.LogInformation da aplicação (GeneratorApp) continuam via ILogger, inalterados.
+// Os logger.LogInformation da aplicação (OrderGeneratorApp) continuam via ILogger, inalterados.
 QuickFix.Logger.ILogFactory logFactory = new QuickFix.Logger.CompositeLogFactory(
     [new QuickFix.Logger.ScreenLogFactory(settings), new QuickFix.Logger.FileLogFactory(settings)]);
+    
 var initiator = new QuickFix.Transport.SocketInitiator(fixApp, storeFactory, settings, logFactory, new DefaultMessageFactory());
 initiator.Start();
 app.Lifetime.ApplicationStopping.Register(() => initiator.Stop());
@@ -77,29 +79,6 @@ app.Lifetime.ApplicationStopping.Register(() => initiator.Stop());
 app.UseDefaultFiles();
 app.UseStaticFiles();
 app.MapHealthChecks("/health");
-
-var orderTimeout = TimeSpan.FromSeconds(app.Configuration.GetValue("OrderGenerator:OrderTimeoutSeconds", 5));
-
-app.MapPost("/api/orders", async (NewOrderRequest req) =>
-{
-    // Validação autoritativa de formato no gerador: entrada inválida nunca vira FIX.
-    var error = OrderValidation.Validate(req);
-    if (error is not null)
-        return Results.Problem(detail: error, statusCode: StatusCodes.Status400BadRequest, title: "Ordem invalida");
-
-    try
-    {
-        var result = await fixApp.SendOrderAsync(req, orderTimeout);
-        return Results.Ok(result);
-    }
-    catch (InvalidOperationException ex)   // sessão FIX indisponível
-    {
-        return Results.Problem(detail: ex.Message, statusCode: StatusCodes.Status503ServiceUnavailable, title: "Sessao FIX indisponivel");
-    }
-    catch (TimeoutException ex)
-    {
-        return Results.Problem(detail: ex.Message, statusCode: StatusCodes.Status504GatewayTimeout, title: "Tempo limite excedido");
-    }
-}).RequireRateLimiting("orders");
+app.MapOrdersEndpoint(fixApp);
 
 app.Run();

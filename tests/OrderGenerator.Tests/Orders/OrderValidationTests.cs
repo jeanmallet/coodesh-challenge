@@ -1,4 +1,4 @@
-using OrderGenerator;
+using OrderGenerator.Orders;
 using Xunit;
 
 namespace OrderGenerator.Tests;

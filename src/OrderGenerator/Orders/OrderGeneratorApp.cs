@@ -3,7 +3,7 @@ using Microsoft.Extensions.Logging;
 using QuickFix;
 using QuickFix.Fields;
 
-namespace OrderGenerator;
+namespace OrderGenerator.Orders;
 
 /// <summary>Resposta do OrderAccumulator, achatada para o formulário web.</summary>
 public record OrderResult(
@@ -15,7 +15,7 @@ public record OrderResult(
 /// registra um TaskCompletionSource por ClOrdID e o completa quando o
 /// ExecutionReport correspondente chega no FromApp (correlação pela tag 11).
 /// </summary>
-public class GeneratorApp(ILogger<GeneratorApp> logger) : MessageCracker, IApplication
+public class OrderGeneratorApp(ILogger<OrderGeneratorApp> logger) : MessageCracker, IApplication
 {
     private readonly ConcurrentDictionary<string, TaskCompletionSource<OrderResult>> _pending = new();
     private volatile SessionID? _sessionId;

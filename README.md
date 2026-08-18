@@ -7,6 +7,13 @@ de R$ 100.000.000, respondendo com `ExecutionReport` (aceite ou rejeição).
 
 > This is a challenge by [Coodesh](https://coodesh.com/)
 
+## Documentação
+
+- [`docs/PRD.md`](docs/PRD.md) — especificação original do desafio.
+- [`CONTEXT.md`](CONTEXT.md) — dicionário do modelo de domínio (termos, definições e
+  sinônimos a evitar).
+- [`docs/adr/`](docs/adr) — decisões de modelagem não óbvias.
+
 ## Tecnologias
 
 - **.NET 10** / C#
@@ -47,8 +54,51 @@ Browser ──HTTP/JSON──> OrderGenerator ──FIX 4.4 (TCP :5001)──> O
   **Rejeição** ⇒ `ExecType=Rejected`, com o motivo em `Text` (tag 58), sem entrar no
   cálculo.
 
-Decisões de modelagem não óbvias estão registradas em [`docs/adr/`](docs/adr) e o
-glossário do domínio em [`CONTEXT.md`](CONTEXT.md).
+## Decisões técnicas
+
+Além das decisões de negócio (ver ADRs), a solução consolidou as seguintes escolhas de
+infraestrutura e organização de código:
+
+- **Generic Host** (`Host.CreateApplicationBuilder`) nos dois processos, com shutdown
+  limpo em `SIGTERM`/`SIGINT` via `IHostedService` — necessário para `docker stop` fazer
+  logout FIX corretamente em vez de derrubar a sessão.
+- **Log de mensagens FIX** cru em disco (`FileLogFactory`, em `fixlog/`), separado do log
+  de aplicação — trilha de auditoria independente do que a aplicação decide logar.
+- **`OrdRejReason`** (tag 103) preenchido em toda rejeição, além do texto livre em `Text`
+  (58) — permite a um cliente FIX real decidir programaticamente o que fazer com a
+  rejeição, não só exibi-la.
+- **`ProblemDetails`** (RFC 7807) como contrato único de erro do `OrderGenerator`
+  (`400`/`503`/`504`/`429`), com `UseExceptionHandler` como rede para o inesperado.
+- **Rate limiting** nativo do ASP.NET Core em `POST /api/orders` (ver seção própria
+  abaixo) — único endpoint HTTP externo do sistema.
+- **Health check** do `OrderGenerator` baseado no estado da sessão FIX, usado pelo
+  `docker compose` para sequenciar a subida dos dois serviços.
+- **Higiene de build**: `Directory.Packages.props` (Central Package Management, evita
+  divergência de versão do QuickFIXn entre os dois lados do protocolo),
+  `Directory.Build.props` compartilhado, `global.json` fixando o SDK, `.editorconfig`
+  registrando o estilo já praticado.
+- **Organização de código**: `OrderAccumulator` em `Application/` (protocolo FIX) +
+  `Domain/` (regra de negócio pura); `OrderGenerator` como uma única vertical slice
+  `Orders/` — projeto simples demais (3 classes) para justificar separar
+  Domain/Application ali.
+
+## Fora de escopo consciente
+
+Itens que um sistema de controle de risco *de verdade* exigiria, mas que estão além do
+que o [PRD](docs/PRD.md) descreve. Registrados para que a ausência seja lida como
+decisão, não como esquecimento:
+
+- **Persistência de exposição e de sequence numbers FIX.** Os dois processos usam
+  `MemoryStoreFactory`: reiniciar o Accumulator zera o controle de risco, e sem seqnum
+  persistido o resend/recovery do FIX não funciona entre execuções. Em produção,
+  `FileStoreFactory` (ou banco) seria obrigatório.
+- **Idempotência por `ClOrdID`.** Sem deduplicação, um resend FIX após reconexão seria
+  contabilizado duas vezes na exposição — consequência direta do item acima.
+- **Autenticação de sessão.** `ToAdmin`/`FromAdmin` vazios nos dois lados: nenhuma
+  validação de credenciais no Logon (tags 553/554) nem whitelist de `CompID`. Qualquer
+  processo que alcance a porta 5001 pode abrir sessão.
+- **Métricas/OpenTelemetry** nos dois processos.
+- **CI.** Um workflow de build + test é o passo natural seguinte ao `docker compose`.
 
 ## Como executar
 

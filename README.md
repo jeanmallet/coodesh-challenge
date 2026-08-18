@@ -7,6 +7,28 @@ de R$ 100.000.000, respondendo com `ExecutionReport` (aceite ou rejeição).
 
 > This is a challenge by [Coodesh](https://coodesh.com/)
 
+## O que é FIX 4.4?
+
+[FIX](https://www.fixtrading.org/) (Financial Information eXchange) é o protocolo
+padrão da indústria financeira para troca de mensagens de negociação em tempo real —
+ordens, execuções, cotações — usado entre corretoras, bolsas e sistemas de gestão de
+ordens desde os anos 90. Mensagens são pares `tag=valor` (ex.: `35=D` identifica o tipo
+da mensagem, `55=PETR4` é o símbolo); a versão usada aqui é a **4.4**.
+
+Uma sessão FIX conecta um ***initiator*** (quem abre a conexão TCP e envia ordens) a um
+***acceptor*** (quem aceita a conexão e responde) — neste projeto, o
+**OrderGenerator é o initiator** e o **OrderAccumulator é o acceptor**. A sessão troca
+*heartbeats* periódicos para detectar queda de conexão, e cada mensagem carrega um
+número de sequência para detectar perda de mensagem.
+
+As duas mensagens que este sistema troca:
+
+- **`NewOrderSingle`** (`35=D`): o OrderGenerator envia essa mensagem para propor uma
+  nova ordem — símbolo, lado, quantidade e preço.
+- **`ExecutionReport`** (`35=8`): o OrderAccumulator responde com essa mensagem,
+  informando se a ordem foi aceita (`ExecType=New`) ou rejeitada (`ExecType=Rejected`,
+  com o motivo).
+
 ## Documentação
 
 - [`docs/PRD.md`](docs/PRD.md) — especificação original do desafio.
@@ -142,6 +164,53 @@ Abra **dois terminais** na raiz do repositório.
 
 > O gerador reconecta sozinho se o acumulador ainda não estiver no ar. O estado é em
 > memória: reiniciar o acumulador zera a exposição.
+
+## Formulário de nova ordem
+
+O formulário em `http://localhost:5080` é o único ponto de entrada do sistema.
+
+| Campo | Regra |
+|---|---|
+| **Símbolo** | PETR4, VALE3 ou VIIA4 (únicos aceitos) |
+| **Lado** | Compra (aumenta a exposição do símbolo) ou Venda (diminui) |
+| **Quantidade** | Inteiro entre 1 e 99.999 |
+| **Preço** | Decimal entre R$ 0,01 e R$ 999,99, múltiplo de 0,01 |
+
+### Online / offline
+
+A página consulta `/health` a cada 5 segundos — o indicador no canto superior direito e
+a cor da barra de destaque refletem o estado da sessão FIX com o OrderAccumulator:
+
+**Online** — sessão ativa, botão habilitado:
+
+![Formulário online, vazio](docs/img/form-online-empty.png)
+
+**Offline** — OrderAccumulator fora do ar ou logon ainda não concluído: um aviso
+substitui o botão, que fica desabilitado, e qualquer resultado/validação anterior é
+limpo da tela:
+
+![Formulário offline](docs/img/form-offline.png)
+
+### Enviando uma ordem
+
+Ao clicar em "Enviar ordem", o botão é desabilitado (evita duplo submit — duas ordens
+por dois cliques rápidos contariam duas vezes na exposição), o formulário é validado no
+browser (mesmas faixas da tabela acima) e só então o `POST /api/orders` é enviado:
+
+![Formulário preenchido antes de enviar](docs/img/form-online-filled.png)
+
+A resposta aparece abaixo do formulário, no formato do `ExecutionReport` devolvido pelo
+OrderAccumulator:
+
+**Aceita** (`ExecType=New`) — a ordem entrou no cálculo da exposição do símbolo:
+
+![Ordem aceita](docs/img/form-online-accepted.png)
+
+**Rejeitada** (`ExecType=Rejected`) — motivo em texto livre no campo `Text` (mesmo
+conteúdo da tag FIX 58); no exemplo abaixo, por ultrapassar o limite de exposição de
+R$ 100.000.000:
+
+![Ordem rejeitada por limite de exposição](docs/img/form-online-rejected.png)
 
 ## Logs
 
